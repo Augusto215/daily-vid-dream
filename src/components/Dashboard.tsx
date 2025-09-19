@@ -7,6 +7,8 @@ import { CredentialsPanel } from "./CredentialsPanel";
 import { VideoGallery } from "./VideoGallery";
 import { SchedulePanel } from "./SchedulePanel";
 import { ErrorLogViewer } from "./ErrorLogViewer";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { 
   Play, 
   Settings, 
@@ -15,7 +17,9 @@ import {
   Sparkles,
   Activity,
   Clock,
-  CheckCircle
+  CheckCircle,
+  LogOut,
+  User
 } from "lucide-react";
 
 interface GenerationStatus {
@@ -30,6 +34,8 @@ interface GenerationStatus {
 export const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'credentials' | 'schedule' | 'gallery'>('dashboard');
   const [isGenerating, setIsGenerating] = useState(false);
+  const { user, signOut } = useAuth();
+  const { profile } = useUserProfile();
   
   // Mock data for demonstration
   const [generations] = useState<GenerationStatus[]>([
@@ -71,6 +77,10 @@ export const Dashboard = () => {
     setTimeout(() => {
       setIsGenerating(false);
     }, 3000);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   const TabButton = ({ 
@@ -119,6 +129,10 @@ export const Dashboard = () => {
             </div>
             
             <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <User className="w-4 h-4" />
+                {profile?.name || user?.email}
+              </div>
               <Badge variant="outline" className="gap-2">
                 <Activity className="w-4 h-4 text-success" />
                 System Active
@@ -139,6 +153,14 @@ export const Dashboard = () => {
                     Generate Now
                   </>
                 )}
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={handleSignOut}
+                className="gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Sair
               </Button>
             </div>
           </div>

@@ -25,16 +25,29 @@ interface CredentialStatus {
   lastUpdated?: string;
 }
 
+interface UserCredential {
+  id: string;
+  user_id: string;
+  open_ai_api_key: string | null;
+  eleven_labs_api_key: string | null;
+  youtube_api_key: string | null;
+  drive_client_id: string | null;
+  drive_client_secret: string | null;
+  drive_api_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const CredentialsPanel = () => {
   const { toast } = useToast();
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [credentials, setCredentials] = useState({
-    openai: '',
-    elevenlabs: '',
-    youtube: '',
-    googleDrive: '',
-    googleClientId: '',
-    googleClientSecret: ''
+    open_ai_api_key: '',
+    eleven_labs_api_key: '',
+    youtube_api_key: '',
+    drive_api_key: '',
+    drive_client_id: '',
+    drive_client_secret: ''
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
@@ -67,32 +80,49 @@ export const CredentialsPanel = () => {
       const { data, error } = await supabase
         .from('user_credentials')
         .select('*')
-        .eq('user_id', session.session.user.id);
+        .eq('user_id', session.session.user.id)
+        .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
 
-      if (data && data.length > 0) {
-        const credentialMap: any = {};
-        const newStatuses = [...statuses];
-
-        data.forEach((cred) => {
-          const serviceKey = cred.service_name.toLowerCase().replace(/\s+/g, '');
-          credentialMap[serviceKey] = cred.api_key;
-          
-          // Update status to connected if we have credentials
-          const statusIndex = newStatuses.findIndex(s => 
-            s.service.toLowerCase().replace(/\s+/g, '') === serviceKey
-          );
-          if (statusIndex !== -1) {
-            newStatuses[statusIndex] = {
-              ...newStatuses[statusIndex],
-              status: 'connected',
-              lastUpdated: new Date(cred.updated_at).toLocaleDateString()
-            };
-          }
+      if (data) {
+        const credData = data as UserCredential;
+        setCredentials({
+          open_ai_api_key: credData.open_ai_api_key || '',
+          eleven_labs_api_key: credData.eleven_labs_api_key || '',
+          youtube_api_key: credData.youtube_api_key || '',
+          drive_api_key: credData.drive_api_key || '',
+          drive_client_id: credData.drive_client_id || '',
+          drive_client_secret: credData.drive_client_secret || ''
         });
 
-        setCredentials(prev => ({ ...prev, ...credentialMap }));
+        // Update status to connected for fields that have values
+        const newStatuses = statuses.map(status => {
+          let hasCredential = false;
+          switch (status.service) {
+            case 'OpenAI':
+              hasCredential = !!credData.open_ai_api_key;
+              break;
+            case 'ElevenLabs':
+              hasCredential = !!credData.eleven_labs_api_key;
+              break;
+            case 'YouTube':
+              hasCredential = !!credData.youtube_api_key;
+              break;
+            case 'Google Drive':
+              hasCredential = !!(credData.drive_api_key && credData.drive_client_id && credData.drive_client_secret);
+              break;
+          }
+
+          return {
+            ...status,
+            status: hasCredential ? 'connected' as const : 'disconnected' as const,
+            lastUpdated: hasCredential ? new Date(credData.updated_at).toLocaleDateString() : undefined
+          };
+        });
+
         setStatuses(newStatuses);
       }
     } catch (error) {
@@ -136,8 +166,8 @@ export const CredentialsPanel = () => {
     }
   };
 
-  const saveCredential = async (serviceName: string, apiKey: string) => {
-    setSaving(prev => ({ ...prev, [serviceName]: true }));
+  const saveCredential = async (fieldKey: string, apiKey: string) => {
+    setSaving(prev => ({ ...prev, [fieldKey]: true }));
     try {
       const { data: session } = await supabase.auth.getSession();
       if (!session.session) {
@@ -149,21 +179,24 @@ export const CredentialsPanel = () => {
         return;
       }
 
+      // Prepare the update object
+      const updateData = {
+        user_id: session.session.user.id,
+        [fieldKey]: apiKey
+      };
+
       const { error } = await supabase
         .from('user_credentials')
-        .upsert({
-          user_id: session.session.user.id,
-          service_name: serviceName,
-          api_key: apiKey
-        }, { 
-          onConflict: 'user_id,service_name' 
+        .upsert(updateData as any, { 
+          onConflict: 'user_id' 
         });
 
       if (error) throw error;
 
-      // Update status to connected
+      // Update local status
+      const serviceName = getServiceNameFromField(fieldKey);
       setStatuses(prev => prev.map(status => {
-        if (status.service.toLowerCase().replace(/\s+/g, '') === serviceName.toLowerCase().replace(/\s+/g, '')) {
+        if (status.service === serviceName) {
           return {
             ...status,
             status: 'connected' as const,
@@ -181,11 +214,28 @@ export const CredentialsPanel = () => {
       console.error('Error saving credential:', error);
       toast({
         title: "Error",
-        description: `Failed to save ${serviceName} credentials`,
+        description: `Failed to save credentials`,
         variant: "destructive",
       });
     } finally {
-      setSaving(prev => ({ ...prev, [serviceName]: false }));
+      setSaving(prev => ({ ...prev, [fieldKey]: false }));
+    }
+  };
+
+  const getServiceNameFromField = (fieldKey: string): string => {
+    switch (fieldKey) {
+      case 'open_ai_api_key':
+        return 'OpenAI';
+      case 'eleven_labs_api_key':
+        return 'ElevenLabs';
+      case 'youtube_api_key':
+        return 'YouTube';
+      case 'drive_api_key':
+      case 'drive_client_id':
+      case 'drive_client_secret':
+        return 'Google Drive';
+      default:
+        return 'Unknown';
     }
   };
 
@@ -195,7 +245,7 @@ export const CredentialsPanel = () => {
       icon: Brain,
       description: "API key for generating motivational video scripts",
       fields: [
-        { key: 'openai', label: 'OpenAI API Key', type: 'password', serviceName: 'OpenAI' }
+        { key: 'open_ai_api_key', label: 'OpenAI API Key', type: 'password' }
       ]
     },
     {
@@ -203,7 +253,7 @@ export const CredentialsPanel = () => {
       icon: Mic,
       description: "API key for text-to-speech audio generation",
       fields: [
-        { key: 'elevenlabs', label: 'ElevenLabs API Key', type: 'password', serviceName: 'ElevenLabs' }
+        { key: 'eleven_labs_api_key', label: 'ElevenLabs API Key', type: 'password' }
       ]
     },
     {
@@ -211,7 +261,7 @@ export const CredentialsPanel = () => {
       icon: Youtube,
       description: "Credentials for automatic video uploads",
       fields: [
-        { key: 'youtube', label: 'YouTube API Key', type: 'password', serviceName: 'YouTube' }
+        { key: 'youtube_api_key', label: 'YouTube API Key', type: 'password' }
       ]
     },
     {
@@ -219,9 +269,9 @@ export const CredentialsPanel = () => {
       icon: HardDrive,
       description: "Access to video assets folder",
       fields: [
-        { key: 'googleClientId', label: 'Google Client ID', type: 'text', serviceName: 'Google Drive Client ID' },
-        { key: 'googleClientSecret', label: 'Google Client Secret', type: 'password', serviceName: 'Google Drive Client Secret' },
-        { key: 'googleDrive', label: 'Google Drive API Key', type: 'password', serviceName: 'Google Drive' }
+        { key: 'drive_client_id', label: 'Google Client ID', type: 'text' },
+        { key: 'drive_client_secret', label: 'Google Client Secret', type: 'password' },
+        { key: 'drive_api_key', label: 'Google Drive API Key', type: 'password' }
       ]
     }
   ];
@@ -300,12 +350,12 @@ export const CredentialsPanel = () => {
                     )}
                   </div>
                   <Button 
-                    onClick={() => saveCredential(field.serviceName, credentials[field.key as keyof typeof credentials])}
+                    onClick={() => saveCredential(field.key, credentials[field.key as keyof typeof credentials])}
                     className="w-full bg-gradient-primary hover:bg-gradient-primary/90"
-                    disabled={loading || saving[field.serviceName] || !credentials[field.key as keyof typeof credentials]}
+                    disabled={loading || saving[field.key] || !credentials[field.key as keyof typeof credentials]}
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    {saving[field.serviceName] ? 'Saving...' : `Save ${field.label}`}
+                    {saving[field.key] ? 'Saving...' : `Save ${field.label}`}
                   </Button>
                 </div>
               ))}

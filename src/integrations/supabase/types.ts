@@ -2774,28 +2774,40 @@ export type Database = {
       }
       user_credentials: {
         Row: {
-          api_key: string
-          created_at: string
           id: string
-          service_name: string
-          updated_at: string
           user_id: string
+          open_ai_api_key: string | null
+          eleven_labs_api_key: string | null
+          youtube_api_key: string | null
+          drive_client_id: string | null
+          drive_client_secret: string | null
+          drive_api_key: string | null
+          created_at: string
+          updated_at: string
         }
         Insert: {
-          api_key: string
-          created_at?: string
           id?: string
-          service_name: string
-          updated_at?: string
           user_id: string
+          open_ai_api_key?: string | null
+          eleven_labs_api_key?: string | null
+          youtube_api_key?: string | null
+          drive_client_id?: string | null
+          drive_client_secret?: string | null
+          drive_api_key?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Update: {
-          api_key?: string
-          created_at?: string
           id?: string
-          service_name?: string
-          updated_at?: string
           user_id?: string
+          open_ai_api_key?: string | null
+          eleven_labs_api_key?: string | null
+          youtube_api_key?: string | null
+          drive_client_id?: string | null
+          drive_client_secret?: string | null
+          drive_api_key?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2867,6 +2879,38 @@ export type Database = {
           vinho?: string
         }
         Relationships: []
+      }
+      users: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          email: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          email?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "users_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {
