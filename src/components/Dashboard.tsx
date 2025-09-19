@@ -6,6 +6,7 @@ import { VideoGenerationCard } from "./VideoGenerationCard";
 import { CredentialsPanel } from "./CredentialsPanel";
 import { VideoGallery } from "./VideoGallery";
 import { SchedulePanel } from "./SchedulePanel";
+import { ErrorLogViewer } from "./ErrorLogViewer";
 import { 
   Play, 
   Settings, 
@@ -234,7 +235,12 @@ export const Dashboard = () => {
           </div>
         )}
 
-        {activeTab === 'credentials' && <CredentialsPanel />}
+        {activeTab === 'credentials' && (
+          <div className="space-y-6">
+            <CredentialsPanel />
+            <ErrorLogViewer />
+          </div>
+        )}
         {activeTab === 'schedule' && <SchedulePanel />}
         {activeTab === 'gallery' && <VideoGallery />}
       </main>

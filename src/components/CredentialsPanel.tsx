@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Key, 
   Youtube, 
@@ -24,6 +26,7 @@ interface CredentialStatus {
 }
 
 export const CredentialsPanel = () => {
+  const { toast } = useToast();
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [credentials, setCredentials] = useState({
     openai: '',
@@ -33,13 +36,76 @@ export const CredentialsPanel = () => {
     googleClientId: '',
     googleClientSecret: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
 
-  const [statuses] = useState<CredentialStatus[]>([
-    { service: 'OpenAI', status: 'connected', lastUpdated: '2024-01-15' },
-    { service: 'ElevenLabs', status: 'connected', lastUpdated: '2024-01-15' },
-    { service: 'YouTube', status: 'error', lastUpdated: '2024-01-14' },
+  const [statuses, setStatuses] = useState<CredentialStatus[]>([
+    { service: 'OpenAI', status: 'disconnected' },
+    { service: 'ElevenLabs', status: 'disconnected' },
+    { service: 'YouTube', status: 'disconnected' },
     { service: 'Google Drive', status: 'disconnected' }
   ]);
+
+  // Load credentials on component mount
+  useEffect(() => {
+    loadCredentials();
+  }, []);
+
+  const loadCredentials = async () => {
+    setLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to manage credentials",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('user_credentials')
+        .select('*')
+        .eq('user_id', session.session.user.id);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const credentialMap: any = {};
+        const newStatuses = [...statuses];
+
+        data.forEach((cred) => {
+          const serviceKey = cred.service_name.toLowerCase().replace(/\s+/g, '');
+          credentialMap[serviceKey] = cred.api_key;
+          
+          // Update status to connected if we have credentials
+          const statusIndex = newStatuses.findIndex(s => 
+            s.service.toLowerCase().replace(/\s+/g, '') === serviceKey
+          );
+          if (statusIndex !== -1) {
+            newStatuses[statusIndex] = {
+              ...newStatuses[statusIndex],
+              status: 'connected',
+              lastUpdated: new Date(cred.updated_at).toLocaleDateString()
+            };
+          }
+        });
+
+        setCredentials(prev => ({ ...prev, ...credentialMap }));
+        setStatuses(newStatuses);
+      }
+    } catch (error) {
+      console.error('Error loading credentials:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const togglePasswordVisibility = (field: string) => {
     setShowPasswords(prev => ({
@@ -70,13 +136,66 @@ export const CredentialsPanel = () => {
     }
   };
 
+  const saveCredential = async (serviceName: string, apiKey: string) => {
+    setSaving(prev => ({ ...prev, [serviceName]: true }));
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to save credentials",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('user_credentials')
+        .upsert({
+          user_id: session.session.user.id,
+          service_name: serviceName,
+          api_key: apiKey
+        }, { 
+          onConflict: 'user_id,service_name' 
+        });
+
+      if (error) throw error;
+
+      // Update status to connected
+      setStatuses(prev => prev.map(status => {
+        if (status.service.toLowerCase().replace(/\s+/g, '') === serviceName.toLowerCase().replace(/\s+/g, '')) {
+          return {
+            ...status,
+            status: 'connected' as const,
+            lastUpdated: new Date().toLocaleDateString()
+          };
+        }
+        return status;
+      }));
+
+      toast({
+        title: "Success",
+        description: `${serviceName} credentials saved successfully`,
+      });
+    } catch (error) {
+      console.error('Error saving credential:', error);
+      toast({
+        title: "Error",
+        description: `Failed to save ${serviceName} credentials`,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(prev => ({ ...prev, [serviceName]: false }));
+    }
+  };
+
   const credentialSections = [
     {
       title: "OpenAI Configuration",
       icon: Brain,
       description: "API key for generating motivational video scripts",
       fields: [
-        { key: 'openai', label: 'OpenAI API Key', type: 'password' }
+        { key: 'openai', label: 'OpenAI API Key', type: 'password', serviceName: 'OpenAI' }
       ]
     },
     {
@@ -84,7 +203,7 @@ export const CredentialsPanel = () => {
       icon: Mic,
       description: "API key for text-to-speech audio generation",
       fields: [
-        { key: 'elevenlabs', label: 'ElevenLabs API Key', type: 'password' }
+        { key: 'elevenlabs', label: 'ElevenLabs API Key', type: 'password', serviceName: 'ElevenLabs' }
       ]
     },
     {
@@ -92,7 +211,7 @@ export const CredentialsPanel = () => {
       icon: Youtube,
       description: "Credentials for automatic video uploads",
       fields: [
-        { key: 'youtube', label: 'YouTube API Key', type: 'password' }
+        { key: 'youtube', label: 'YouTube API Key', type: 'password', serviceName: 'YouTube' }
       ]
     },
     {
@@ -100,9 +219,9 @@ export const CredentialsPanel = () => {
       icon: HardDrive,
       description: "Access to video assets folder",
       fields: [
-        { key: 'googleClientId', label: 'Google Client ID', type: 'text' },
-        { key: 'googleClientSecret', label: 'Google Client Secret', type: 'password' },
-        { key: 'googleDrive', label: 'Google Drive API Key', type: 'password' }
+        { key: 'googleClientId', label: 'Google Client ID', type: 'text', serviceName: 'Google Drive Client ID' },
+        { key: 'googleClientSecret', label: 'Google Client Secret', type: 'password', serviceName: 'Google Drive Client Secret' },
+        { key: 'googleDrive', label: 'Google Drive API Key', type: 'password', serviceName: 'Google Drive' }
       ]
     }
   ];
@@ -161,6 +280,7 @@ export const CredentialsPanel = () => {
                       }))}
                       className="bg-secondary/20 border-border/50 pr-10"
                       placeholder={`Enter your ${field.label.toLowerCase()}`}
+                      disabled={loading}
                     />
                     {field.type === 'password' && (
                       <Button
@@ -169,6 +289,7 @@ export const CredentialsPanel = () => {
                         size="sm"
                         className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
                         onClick={() => togglePasswordVisibility(field.key)}
+                        disabled={loading}
                       >
                         {showPasswords[field.key] ? (
                           <EyeOff className="w-4 h-4" />
@@ -178,12 +299,16 @@ export const CredentialsPanel = () => {
                       </Button>
                     )}
                   </div>
+                  <Button 
+                    onClick={() => saveCredential(field.serviceName, credentials[field.key as keyof typeof credentials])}
+                    className="w-full bg-gradient-primary hover:bg-gradient-primary/90"
+                    disabled={loading || saving[field.serviceName] || !credentials[field.key as keyof typeof credentials]}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {saving[field.serviceName] ? 'Saving...' : `Save ${field.label}`}
+                  </Button>
                 </div>
               ))}
-              <Button className="w-full bg-gradient-primary hover:bg-gradient-primary/90">
-                <Save className="w-4 h-4 mr-2" />
-                Save Configuration
-              </Button>
             </CardContent>
           </Card>
         ))}

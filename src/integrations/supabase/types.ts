@@ -1559,6 +1559,36 @@ export type Database = {
         }
         Relationships: []
       }
+      generation_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          generation_type: string
+          id: string
+          metadata: Json | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          generation_type: string
+          id?: string
+          metadata?: Json | null
+          status: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          generation_type?: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       giacomo: {
         Row: {
           aluguel: string | null
@@ -2739,6 +2769,33 @@ export type Database = {
         Update: {
           id?: number
           token?: string | null
+        }
+        Relationships: []
+      }
+      user_credentials: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          service_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string
+          id?: string
+          service_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          service_name?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
