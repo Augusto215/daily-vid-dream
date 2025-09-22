@@ -46,8 +46,7 @@ export const CredentialsPanel = () => {
     eleven_labs_api_key: '',
     youtube_api_key: '',
     drive_api_key: '',
-    drive_client_id: '',
-    drive_client_secret: ''
+    drive_client_id: ''
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
@@ -94,8 +93,7 @@ export const CredentialsPanel = () => {
           eleven_labs_api_key: credData.eleven_labs_api_key || '',
           youtube_api_key: credData.youtube_api_key || '',
           drive_api_key: credData.drive_api_key || '',
-          drive_client_id: credData.drive_client_id || '',
-          drive_client_secret: credData.drive_client_secret || ''
+          drive_client_id: credData.drive_client_id || ''
         });
 
         // Update status to connected for fields that have values
@@ -112,7 +110,7 @@ export const CredentialsPanel = () => {
               hasCredential = !!credData.youtube_api_key;
               break;
             case 'Google Drive':
-              hasCredential = !!(credData.drive_api_key && credData.drive_client_id && credData.drive_client_secret);
+              hasCredential = !!(credData.drive_api_key && credData.drive_client_id);
               break;
           }
 
@@ -232,7 +230,6 @@ export const CredentialsPanel = () => {
         return 'YouTube';
       case 'drive_api_key':
       case 'drive_client_id':
-      case 'drive_client_secret':
         return 'Google Drive';
       default:
         return 'Unknown';
@@ -270,7 +267,6 @@ export const CredentialsPanel = () => {
       description: "Access to video assets folder",
       fields: [
         { key: 'drive_client_id', label: 'Google Client ID', type: 'text' },
-        { key: 'drive_client_secret', label: 'Google Client Secret', type: 'password' },
         { key: 'drive_api_key', label: 'Google Drive API Key', type: 'password' }
       ]
     }

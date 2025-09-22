@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { VideoGenerationCard } from "./VideoGenerationCard";
 import { CredentialsPanel } from "./CredentialsPanel";
 import { VideoGallery } from "./VideoGallery";
 import { SchedulePanel } from "./SchedulePanel";
@@ -10,76 +8,24 @@ import { ErrorLogViewer } from "./ErrorLogViewer";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { 
-  Play, 
   Settings, 
   Calendar, 
   Video,
   Sparkles,
   Activity,
-  Clock,
-  CheckCircle,
   LogOut,
   User
 } from "lucide-react";
 
-interface GenerationStatus {
-  id: string;
-  status: 'generating' | 'completed' | 'failed';
-  progress: number;
-  title: string;
-  createdAt: string;
-  duration?: string;
-}
-
 export const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'credentials' | 'schedule' | 'gallery'>('dashboard');
-  const [isGenerating, setIsGenerating] = useState(false);
+  // Set default tab to 'credentials' as requested
+  const [activeTab, setActiveTab] = useState<'credentials' | 'schedule' | 'gallery'>('credentials');
+  
   const { user, signOut } = useAuth();
   const { profile } = useUserProfile();
-  
-  // Mock data for demonstration
-  const [generations] = useState<GenerationStatus[]>([
-    {
-      id: '1',
-      status: 'generating',
-      progress: 65,
-      title: 'Motivational Monday: Unlock Your Potential',
-      createdAt: '2024-01-15T10:30:00Z'
-    },
-    {
-      id: '2',
-      status: 'completed',
-      progress: 100,
-      title: 'Success Mindset: 5 Keys to Achievement',
-      createdAt: '2024-01-14T09:15:00Z',
-      duration: '3:42'
-    },
-    {
-      id: '3',
-      status: 'completed',
-      progress: 100,
-      title: 'Transform Your Life Today',
-      createdAt: '2024-01-13T14:20:00Z',
-      duration: '4:18'
-    }
-  ]);
-
-  const stats = {
-    totalVideos: 127,
-    todayGenerated: 3,
-    totalViews: '2.1M',
-    avgDuration: '3:45'
-  };
-
-  const handleGenerate = () => {
-    setIsGenerating(true);
-    // Simulate generation process
-    setTimeout(() => {
-      setIsGenerating(false);
-    }, 3000);
-  };
 
   const handleSignOut = async () => {
+    console.log('Dashboard: Logout button clicked');
     await signOut();
   };
 
@@ -138,42 +84,18 @@ export const Dashboard = () => {
                 System Active
               </Badge>
               <Button 
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="bg-gradient-primary hover:bg-gradient-primary/90 shadow-glow"
-              >
-                {isGenerating ? (
-                  <>
-                    <Clock className="w-4 h-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 mr-2" />
-                    Generate Now
-                  </>
-                )}
-              </Button>
-              <Button 
                 variant="outline"
                 onClick={handleSignOut}
                 className="gap-2"
               >
                 <LogOut className="w-4 h-4" />
-                Sair
+                Desconectar
               </Button>
             </div>
           </div>
           
           {/* Navigation */}
           <nav className="flex gap-2 mt-6">
-            <TabButton
-              id="dashboard"
-              icon={Activity}
-              label="Dashboard"
-              isActive={activeTab === 'dashboard'}
-              onClick={() => setActiveTab('dashboard')}
-            />
             <TabButton
               id="credentials"
               icon={Settings}
@@ -201,68 +123,13 @@ export const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        {activeTab === 'dashboard' && (
-          <div className="space-y-8">
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="bg-gradient-card border-border/50 shadow-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Videos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-foreground">{stats.totalVideos}</div>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-card border-border/50 shadow-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Today Generated</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-success">{stats.todayGenerated}</div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-card border-border/50 shadow-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Views</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-primary">{stats.totalViews}</div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-card border-border/50 shadow-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Avg Duration</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-accent">{stats.avgDuration}</div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Generation Status */}
-            <div>
-              <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                Generation Status
-              </h2>
-              <div className="grid gap-4">
-                {generations.map((generation) => (
-                  <VideoGenerationCard key={generation.id} generation={generation} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {activeTab === 'credentials' && (
           <div className="space-y-6">
             <CredentialsPanel />
             <ErrorLogViewer />
           </div>
         )}
+
         {activeTab === 'schedule' && <SchedulePanel />}
         {activeTab === 'gallery' && <VideoGallery />}
       </main>
