@@ -89,7 +89,7 @@ export const Dashboard = () => {
                 className="gap-2"
               >
                 <LogOut className="w-4 h-4" />
-                Desconectar
+                Sair da conta
               </Button>
             </div>
           </div>
