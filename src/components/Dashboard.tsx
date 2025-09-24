@@ -7,6 +7,7 @@ import { SchedulePanel } from "./SchedulePanel";
 import { ErrorLogViewer } from "./ErrorLogViewer";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { 
   Settings, 
   Calendar, 
@@ -18,8 +19,8 @@ import {
 } from "lucide-react";
 
 export const Dashboard = () => {
-  // Set default tab to 'credentials' as requested
-  const [activeTab, setActiveTab] = useState<'credentials' | 'schedule' | 'gallery'>('credentials');
+  // Use localStorage to persist the active tab, defaulting to 'credentials'
+  const [activeTab, setActiveTab] = useLocalStorage<'credentials' | 'schedule' | 'gallery'>('dashboard-active-tab', 'credentials');
   
   const { user, signOut } = useAuth();
   const { profile } = useUserProfile();
