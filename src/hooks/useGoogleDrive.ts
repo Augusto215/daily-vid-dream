@@ -503,6 +503,59 @@ export const useGoogleDrive = () => {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
+  const getAccessToken = async (): Promise<string | null> => {
+    console.log('getAccessToken chamado - Estado atual:');
+    console.log('- isAuthenticated:', isAuthenticated);
+    console.log('- accessToken existe:', !!accessToken);
+    console.log('- tokenClient existe:', !!tokenClient);
+
+    if (!isAuthenticated) {
+      console.warn('Usuário não autenticado no Google Drive');
+      return null;
+    }
+
+    // Verificar se temos token no estado atual
+    if (accessToken) {
+      console.log('Retornando token do estado:', accessToken.substring(0, 20) + '...');
+      return accessToken;
+    }
+
+    // Verificar token salvo no localStorage
+    const savedToken = localStorage.getItem('google_drive_token');
+    const tokenExpiry = localStorage.getItem('google_drive_token_expiry');
+    
+    if (savedToken && tokenExpiry) {
+      const now = Date.now();
+      const expiry = parseInt(tokenExpiry);
+      
+      console.log('Token localStorage:');
+      console.log('- Token existe:', !!savedToken);
+      console.log('- Expira em:', new Date(expiry).toLocaleString());
+      console.log('- Ainda válido:', now < expiry - 300000);
+      
+      // Verificar se o token ainda não expirou (com margem de 5 minutos)
+      if (now < expiry - 300000) { // 5 minutos = 300000ms
+        console.log('Usando token do localStorage');
+        
+        // Atualizar estado
+        setAccessToken(savedToken);
+        
+        // Configurar no GAPI se disponível
+        if (window.gapi?.client) {
+          window.gapi.client.setToken({ access_token: savedToken });
+        }
+        
+        return savedToken;
+      } else {
+        console.log('Token do localStorage expirado, removendo');
+        removeToken();
+      }
+    }
+
+    console.error('Nenhum token válido encontrado');
+    return null;
+  };
+
   return {
     videos,
     loading,
@@ -515,6 +568,7 @@ export const useGoogleDrive = () => {
     formatFileSize,
     formatDuration,
     formatDate,
-    loadCredentials
+    loadCredentials,
+    getAccessToken
   };
 };
