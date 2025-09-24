@@ -199,65 +199,53 @@ export const VideoGallery = () => {
         </Alert>
       )}
 
-      {/* Header and Controls */}
-      <Card className="bg-gradient-card border-border/50 shadow-card">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Video className="w-5 h-5 text-primary" />
-                Galeria de Vídeos
-                {isAuthenticated && (
+      {/* Header and Controls - Only show when authenticated */}
+      {isAuthenticated && (
+        <Card className="bg-gradient-card border-border/50 shadow-card">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Video className="w-5 h-5 text-primary" />
+                  Galeria de Vídeos
                   <Badge variant="outline" className="ml-2">
                     <HardDrive className="w-3 h-3 mr-1" />
                     Google Drive
                   </Badge>
-                )}
+                  {hasRestoredFilters && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      <Filter className="w-3 h-3 mr-1" />
+                      Filtros Ativos
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {`${videos.length} vídeos encontrados no Google Drive`}
+                </CardDescription>
+              </div>
+              
+              {/* Área de botões */}
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleRefresh} 
+                  size="sm" 
+                  variant="outline"
+                  disabled={loading}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
                 {hasRestoredFilters && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    <Filter className="w-3 h-3 mr-1" />
-                    Filtros Ativos
-                  </Badge>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {isAuthenticated 
-                  ? `${videos.length} vídeos encontrados no Google Drive`
-                  : 'Conecte-se ao Google Drive para visualizar seus vídeos'
-                }
-              </CardDescription>
-            </div>
-            
-            {/* Área de botões - sempre presente */}
-            <div className="flex gap-2">
-              {/* Botões de ação quando autenticado */}
-              {isAuthenticated && (
-                <>
                   <Button 
-                    onClick={handleRefresh} 
+                    onClick={clearAllFilters} 
                     size="sm" 
                     variant="outline"
-                    disabled={loading}
+                    title="Limpar todos os filtros"
                   >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Atualizar
+                    <Filter className="w-4 h-4 mr-2" />
+                    Limpar Filtros
                   </Button>
-                  {hasRestoredFilters && (
-                    <Button 
-                      onClick={clearAllFilters} 
-                      size="sm" 
-                      variant="outline"
-                      title="Limpar todos os filtros"
-                    >
-                      <Filter className="w-4 h-4 mr-2" />
-                      Limpar Filtros
-                    </Button>
-                  )}
-                </>
-              )}
-              
-              {/* Botão desconectar - sempre presente se há credenciais */}
-              {(credentials || isAuthenticated) && (
+                )}
                 <Button 
                   onClick={signOut} 
                   size="sm" 
@@ -267,12 +255,10 @@ export const VideoGallery = () => {
                   <HardDrive className="w-4 h-4 mr-2" />
                   Desconectar
                 </Button>
-              )}
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        
-        {isAuthenticated && (
+          </CardHeader>
+          
           <CardContent>
             <div className="flex flex-col md:flex-row gap-4">
               <div className="relative flex-1">
@@ -312,8 +298,8 @@ export const VideoGallery = () => {
               </Select>
             </div>
           </CardContent>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Loading State */}
       {loading && isAuthenticated && (
