@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,6 +91,49 @@ export const SchedulePanel = () => {
   // Video preparation hook (agora inclui YouTube upload automático)
   const { preparedVideos, isPreparingVideo, preparationLogs, manualPrepareVideo, clearLogs } = useVideoPreparation(schedules, getOpenAIKey(), getElevenLabsKey(), getYouTubeKey());
 
+  // Persist prepared videos in localStorage
+  const [persistedPreparedVideos, setPersistedPreparedVideos] = useLocalStorage('daily-dream-prepared-videos', []);
+
+  // Combine prepared videos from hook with persisted ones, removing duplicates
+  const allPreparedVideos = React.useMemo(() => {
+    const combined = [...persistedPreparedVideos, ...preparedVideos];
+    // Remove duplicates based on id
+    const unique = combined.filter((video, index, self) => 
+      index === self.findIndex(v => v.id === video.id)
+    );
+    return unique;
+  }, [persistedPreparedVideos, preparedVideos]);
+
+  // Update persisted videos when preparedVideos changes
+  React.useEffect(() => {
+    if (preparedVideos.length > 0) {
+      const newVideos = preparedVideos.filter(video => 
+        !persistedPreparedVideos.some(pv => pv.id === video.id)
+      );
+      if (newVideos.length > 0) {
+        setPersistedPreparedVideos([...persistedPreparedVideos, ...newVideos]);
+      }
+    }
+  }, [preparedVideos, persistedPreparedVideos, setPersistedPreparedVideos]);
+
+  // Clean old videos on component mount
+  React.useEffect(() => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const oldVideosCount = persistedPreparedVideos.filter(video => 
+      new Date(video.createdAt) <= sevenDaysAgo
+    ).length;
+    
+    if (oldVideosCount > 0) {
+      const recentVideos = persistedPreparedVideos.filter(video => 
+        new Date(video.createdAt) > sevenDaysAgo
+      );
+      setPersistedPreparedVideos(recentVideos);
+      console.log(`Limpeza automática na inicialização: ${oldVideosCount} vídeos antigos removidos`);
+    }
+  }, []); // Only run on mount
+
   // Função para baixar vídeo preparado
   const handleDownloadVideo = (video: any) => {
     if (!video.outputPath) return;
@@ -132,6 +175,26 @@ export const SchedulePanel = () => {
     document.body.removeChild(link);
     
     console.log('Download do áudio iniciado:', audioUrl);
+  };
+
+  // Função para deletar vídeo preparado
+  const handleDeletePreparedVideo = (videoId: string) => {
+    const updatedVideos = persistedPreparedVideos.filter(video => video.id !== videoId);
+    setPersistedPreparedVideos(updatedVideos);
+    console.log('Vídeo preparado deletado:', videoId);
+  };
+
+  // Função para limpar vídeos antigos (mais de 7 dias)
+  const handleClearOldVideos = () => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentVideos = persistedPreparedVideos.filter(video => 
+      new Date(video.createdAt) > sevenDaysAgo
+    );
+    
+    setPersistedPreparedVideos(recentVideos);
+    console.log(`Limpeza automática: ${persistedPreparedVideos.length - recentVideos.length} vídeos antigos removidos`);
   };
 
 
@@ -336,7 +399,7 @@ export const SchedulePanel = () => {
         <CardContent>
           <div className="space-y-4">
             {schedules.map((schedule) => {
-              const preparedVideo = preparedVideos.find(pv => pv.scheduleId === schedule.id);
+              const preparedVideo = allPreparedVideos.find(pv => pv.scheduleId === schedule.id);
               const isSchedulePreparing = isPreparingVideo && !preparedVideo;
               
               return (
@@ -591,11 +654,31 @@ export const SchedulePanel = () => {
             </div>
 
             {/* Prepared Videos Summary */}
-            {preparedVideos.length > 0 && (
+            {allPreparedVideos.length > 0 && (
               <div className="pt-4 border-t border-border/50">
-                <h4 className="text-sm font-medium mb-3">Prepared Videos ({preparedVideos.length})</h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium">Prepared Videos ({allPreparedVideos.length})</h4>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleClearOldVideos}
+                      className="text-xs"
+                    >
+                      Clear Old (7+ days)
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPersistedPreparedVideos([])}
+                      className="text-xs text-destructive hover:text-destructive"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-2">
-                  {preparedVideos.map((video) => (
+                  {allPreparedVideos.map((video) => (
                     <div 
                       key={video.id}
                       className="flex items-center justify-between p-3 rounded-lg bg-secondary/20 border border-border/30"
@@ -606,8 +689,13 @@ export const SchedulePanel = () => {
                         {video.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
                         
                         <div>
-                          <div className="text-sm font-medium">
-                            Schedule {video.scheduleId} • {video.status}
+                          <div className="text-sm font-medium flex items-center gap-2">
+                            <span>Schedule {video.scheduleId} • {video.status}</span>
+                            {persistedPreparedVideos.some(pv => pv.id === video.id) && (
+                              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/30">
+                                Saved
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {video.sourceVideos.length > 0 && (
@@ -694,6 +782,14 @@ export const SchedulePanel = () => {
                               Ver no YouTube
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDeletePreparedVideo(video.id)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
                         </div>
                       )}
                     </div>
