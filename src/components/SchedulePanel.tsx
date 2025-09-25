@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useVideoPreparation } from "@/hooks/useVideoPreparation";
 import { useGoogleDrive } from "@/hooks/useGoogleDrive";
+import { useCredentials } from "@/hooks/useCredentials";
 import { 
   Calendar, 
   Clock, 
@@ -22,7 +23,9 @@ import {
   Loader,
   FileVideo,
   Terminal,
-  Download
+  Download,
+  FileText,
+  Youtube
 } from "lucide-react";
 
 interface ScheduleEntry {
@@ -35,11 +38,16 @@ interface ScheduleEntry {
 }
 
 export const SchedulePanel = () => {
+  // State for expanded script logs
+  const [expandedScripts, setExpandedScripts] = useState<Set<number>>(new Set());
+  
   // Persist schedule form state
   const [isAutoEnabled, setIsAutoEnabled] = useLocalStorage('daily-dream-auto-enabled', true);
   const [scheduleTime, setScheduleTime] = useLocalStorage('daily-dream-schedule-time', "09:00");
   const [frequency, setFrequency] = useLocalStorage('daily-dream-frequency', "daily");
   const [customDate, setCustomDate] = useLocalStorage('daily-dream-custom-date', "");
+  // Get API keys from user credentials
+  const { getOpenAIKey, getElevenLabsKey, getYouTubeKey } = useCredentials();
   
   // Persist active schedules
   const [schedules, setSchedules] = useLocalStorage<ScheduleEntry[]>('daily-dream-schedules', [
@@ -80,8 +88,8 @@ export const SchedulePanel = () => {
     console.log('=== FIM DEBUG ===');
   };
   
-  // Video preparation hook
-  const { preparedVideos, isPreparingVideo, preparationLogs, manualPrepareVideo, clearLogs } = useVideoPreparation(schedules);
+  // Video preparation hook (agora inclui YouTube upload automático)
+  const { preparedVideos, isPreparingVideo, preparationLogs, manualPrepareVideo, clearLogs } = useVideoPreparation(schedules, getOpenAIKey(), getElevenLabsKey(), getYouTubeKey());
 
   // Função para baixar vídeo preparado
   const handleDownloadVideo = (video: any) => {
@@ -103,6 +111,31 @@ export const SchedulePanel = () => {
     }
   };
 
+  // Função para baixar áudio gerado separadamente
+  const handleDownloadAudio = (video: any) => {
+    if (!video.generatedAudio || !video.generatedAudio.downloadUrl) {
+      console.warn('Áudio não disponível para download');
+      return;
+    }
+    
+    // Cria URL completa para download do áudio
+    const audioUrl = video.generatedAudio.downloadUrl.startsWith('http') 
+      ? video.generatedAudio.downloadUrl 
+      : `http://localhost:3001${video.generatedAudio.downloadUrl}`;
+    
+    // Cria elemento temporário para download
+    const link = document.createElement('a');
+    link.href = audioUrl;
+    link.download = video.generatedAudio.filename || `audio_${video.scheduleId}_${video.id}.mp3`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log('Download do áudio iniciado:', audioUrl);
+  };
+
+
+
   const handleSaveSchedule = () => {
     if (!isAutoEnabled) return;
 
@@ -112,8 +145,9 @@ export const SchedulePanel = () => {
       const [hours, minutes] = scheduleTime.split(':').map(Number);
       
       if (frequency === 'custom' && customDate) {
-        const nextRun = new Date(customDate);
-        nextRun.setHours(hours, minutes, 0, 0);
+        // Parse the date in local timezone to avoid UTC conversion issues
+        const [year, month, day] = customDate.split('-').map(Number);
+        const nextRun = new Date(year, month - 1, day, hours, minutes, 0, 0);
         return nextRun.toISOString();
       }
       
@@ -138,13 +172,22 @@ export const SchedulePanel = () => {
       return nextRun.toISOString();
     };
 
+    const nextRunDate = getNextRun();
     const newSchedule: ScheduleEntry = {
       id: Date.now().toString(),
       time: scheduleTime,
       frequency: frequency.charAt(0).toUpperCase() + frequency.slice(1),
       status: 'active',
-      nextRun: getNextRun()
+      nextRun: nextRunDate
     };
+
+    console.log("Creating schedule with:", {
+      frequency,
+      customDate,
+      scheduleTime,
+      nextRunDate,
+      formatted: formatDateTime(nextRunDate)
+    });
 
     setSchedules([...schedules, newSchedule]);
     
@@ -263,6 +306,7 @@ export const SchedulePanel = () => {
                   </p>
                 </div>
               )}
+  
             </div>
           )}
 
@@ -477,14 +521,71 @@ export const SchedulePanel = () => {
                 </p>
               ) : (
                 <div className="space-y-1">
-                  {preparationLogs.map((log, index) => (
-                    <div 
-                      key={index} 
-                      className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {log}
-                    </div>
-                  ))}
+                  {preparationLogs.map((log, index) => {
+                    // Destaca logs de script gerado
+                    const isScriptLog = log.includes('📝');
+                    const isScriptStart = log.includes('=== SCRIPT GERADO ===');
+                    const isScriptEnd = log.includes('=== FIM DO SCRIPT ===');
+                    const isScriptContent = isScriptLog && !isScriptStart && !isScriptEnd && log.trim() !== '📝';
+                    
+                    // Para script start, adiciona botão de expand/collapse
+                    if (isScriptStart) {
+                      const isExpanded = expandedScripts.has(index);
+                      return (
+                        <div key={index}>
+                          <div 
+                            className="text-xs font-mono text-blue-600 font-semibold bg-blue-50/50 px-2 py-1 rounded cursor-pointer hover:bg-blue-100/50 flex items-center justify-between"
+                            onClick={() => {
+                              const newExpanded = new Set(expandedScripts);
+                              if (isExpanded) {
+                                newExpanded.delete(index);
+                              } else {
+                                newExpanded.add(index);
+                              }
+                              setExpandedScripts(newExpanded);
+                            }}
+                          >
+                            <span>{log}</span>
+                            <span className="ml-2 text-xs">
+                              {isExpanded ? '🔽 Colapsar' : '▶️ Expandir'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    // Para conteúdo do script e script end, mostra apenas se expandido
+                    if (isScriptContent || isScriptEnd) {
+                      // Encontrar o índice do script start mais próximo para trás
+                      let scriptStartIndex = -1;
+                      for (let i = index - 1; i >= 0; i--) {
+                        if (preparationLogs[i].includes('=== SCRIPT GERADO ===')) {
+                          scriptStartIndex = i;
+                          break;
+                        }
+                      }
+                      
+                      const isExpanded = scriptStartIndex >= 0 && expandedScripts.has(scriptStartIndex);
+                      if (!isExpanded) {
+                        return null; // Não mostra o conteúdo se colapsado
+                      }
+                    }
+                    
+                    return (
+                      <div 
+                        key={index} 
+                        className={`text-xs font-mono transition-colors ${
+                          isScriptStart || isScriptEnd 
+                            ? 'text-blue-600 font-semibold bg-blue-50/50 px-2 py-1 rounded' 
+                            : isScriptLog 
+                              ? 'text-green-700 bg-green-50/30 px-2 py-0.5 rounded ml-2' 
+                              : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {log}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -519,19 +620,81 @@ export const SchedulePanel = () => {
                           <div className="text-xs text-muted-foreground">
                             Created: {new Date(video.createdAt).toLocaleString()}
                           </div>
+                          {video.generatedScript && (
+                            <div className="text-xs text-green-600 mt-1">
+                              📝 Script gerado automaticamente ({video.generatedScript.tokensUsed} tokens)
+                            </div>
+                          )}
+                          {video.hasAudio && (
+                            <div className="text-xs text-purple-600 mt-1">
+                              🎵 Vídeo inclui áudio narrado automaticamente
+                            </div>
+                          )}
+                          {video.generatedAudio && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              🎤 Arquivo de áudio disponível para download separado
+                            </div>
+                          )}
+                          {video.youtubeUpload && (
+                            <div className="text-xs text-red-600 mt-1">
+                              📺 Postado no YouTube automaticamente - ID: {video.youtubeUpload.videoId}
+                            </div>
+                          )}
                         </div>
                       </div>
                       
                       {video.status === 'ready' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-2 bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
-                          onClick={() => handleDownloadVideo(video)}
-                        >
-                          <Download className="w-3 h-3" />
-                          Download
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          {video.generatedScript && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 bg-blue-500/10 text-blue-600 border-blue-500/30 hover:bg-blue-500/20"
+                              onClick={() => {
+                                // Criar modal ou expandir para mostrar o script
+                                alert(video.generatedScript?.script);
+                              }}
+                            >
+                              <FileText className="w-3 h-3" />
+                              Ver Script
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`gap-2 ${
+                              video.hasAudio 
+                                ? "bg-purple-500/10 text-purple-600 border-purple-500/30 hover:bg-purple-500/20" 
+                                : "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
+                            }`}
+                            onClick={() => handleDownloadVideo(video)}
+                          >
+                            <Download className="w-3 h-3" />
+                            {video.hasAudio ? "MP4 + Áudio" : "Download MP4"}
+                          </Button>
+                          {video.generatedAudio && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 bg-orange-500/10 text-orange-600 border-orange-500/30 hover:bg-orange-500/20"
+                              onClick={() => handleDownloadAudio(video)}
+                            >
+                              <Download className="w-3 h-3" />
+                              Áudio MP3
+                            </Button>
+                          )}
+                          {video.youtubeUpload && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 bg-red-500/10 text-red-600 border-red-500/30 hover:bg-red-500/20"
+                              onClick={() => window.open(video.youtubeUpload.videoUrl, '_blank')}
+                            >
+                              <Youtube className="w-3 h-3" />
+                              Ver no YouTube
+                            </Button>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
