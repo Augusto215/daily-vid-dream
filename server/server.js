@@ -201,21 +201,48 @@ IMPORTANTE:
 // Helper function to test ElevenLabs API key validity
 async function testElevenLabsApiKey(apiKey) {
   try {
+    console.log('🔑 Testing ElevenLabs API key connectivity...');
+    
     const response = await axios({
       method: 'GET',
       url: 'https://api.elevenlabs.io/v1/user',
       headers: {
-        'xi-api-key': apiKey
+        'xi-api-key': apiKey,
+        'User-Agent': 'DailyVidDream/1.0'
       },
-      timeout: 10000
+      timeout: 30000, // Aumentado para 30 segundos
+      maxRedirects: 5,
+      validateStatus: function (status) {
+        return status < 500; // Resolve para qualquer status abaixo de 500
+      }
     });
     
-    console.log('✅ ElevenLabs API key is valid');
-    console.log('User info:', response.data);
-    return { valid: true, user: response.data };
+    if (response.status === 200) {
+      console.log('✅ ElevenLabs API key is valid');
+      console.log('User info:', response.data);
+      return { valid: true, user: response.data };
+    } else {
+      console.error(`❌ ElevenLabs API returned status ${response.status}:`, response.data);
+      return { valid: false, error: `API returned status ${response.status}: ${JSON.stringify(response.data)}` };
+    }
   } catch (error) {
-    console.error('❌ ElevenLabs API key test failed:', error.response?.status, error.response?.data);
-    return { valid: false, error: error.response?.data || error.message };
+    console.error('❌ ElevenLabs API key test failed:');
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    
+    if (error.code === 'ECONNABORTED') {
+      console.error('Connection timeout - check your internet connection');
+      return { valid: false, error: 'Connection timeout - check your internet connection and try again' };
+    } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      console.error('Network connectivity issue');
+      return { valid: false, error: 'Network connectivity issue - check your internet connection' };
+    } else if (error.response) {
+      console.error('HTTP Status:', error.response.status);
+      console.error('Response data:', error.response.data);
+      return { valid: false, error: error.response.data || `HTTP ${error.response.status}` };
+    } else {
+      return { valid: false, error: error.message };
+    }
   }
 }
 
@@ -241,7 +268,7 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
     console.log('Testing ElevenLabs API key...');
     const apiKeyTest = await testElevenLabsApiKey(elevenLabsApiKey);
     if (!apiKeyTest.valid) {
-      throw new Error(`Invalid ElevenLabs API key: ${JSON.stringify(apiKeyTest.error)}`);
+      throw new Error(`Invalid ElevenLabs API key: ${apiKeyTest.error}`);
     }
 
     // Usar axios para fazer a requisição diretamente (mais confiável)
@@ -263,21 +290,48 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
       }
     };
 
-    console.log('Making request to ElevenLabs API...');
-    console.log(`Using voice ID: ${voiceId}`);
+    // Função de retry para tornar mais robusto
+    const makeRequestWithRetry = async (maxRetries = 3) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`Making request to ElevenLabs API (attempt ${attempt}/${maxRetries})...`);
+          console.log(`Using voice ID: ${voiceId}`);
 
-    const response = await axios({
-      method: 'POST',
-      url: url,
-      headers: {
-        'Accept': 'audio/mpeg',
-        'Content-Type': 'application/json',
-        'xi-api-key': elevenLabsApiKey
-      },
-      data: requestBody,
-      responseType: 'arraybuffer', // Importante para receber dados binários
-      timeout: 30000 // 30 segundos timeout
-    });
+          const response = await axios({
+            method: 'POST',
+            url: url,
+            headers: {
+              'Accept': 'audio/mpeg',
+              'Content-Type': 'application/json',
+              'xi-api-key': elevenLabsApiKey,
+              'User-Agent': 'DailyVidDream/1.0'
+            },
+            data: requestBody,
+            responseType: 'arraybuffer', // Importante para receber dados binários
+            timeout: 60000, // 60 segundos para textos maiores
+            maxRedirects: 5,
+            validateStatus: function (status) {
+              return status < 400; // Aceita apenas status de sucesso
+            }
+          });
+
+          return response;
+        } catch (error) {
+          console.log(`❌ Attempt ${attempt} failed:`, error.code || error.message);
+          
+          if (attempt === maxRetries) {
+            throw error; // Re-throw no último attempt
+          }
+          
+          // Aguardar antes de tentar novamente (backoff exponencial)
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10s
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    };
+
+    const response = await makeRequestWithRetry();
 
     console.log('Audio response received, saving file...');
 

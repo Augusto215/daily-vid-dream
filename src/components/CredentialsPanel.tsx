@@ -300,65 +300,6 @@ export const CredentialsPanel = () => {
         </CardContent>
       </Card>
 
-      {/* YouTube OAuth Instructions */}
-      <Card className="bg-gradient-card border-border/50 shadow-card border-blue-500/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Youtube className="w-5 h-5 text-blue-600" />
-            Como Obter YouTube Access Token
-          </CardTitle>
-          <CardDescription>
-            Siga estes passos para configurar o upload automático para YouTube
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-blue-50/50 p-4 rounded-lg space-y-3">
-            <div className="text-sm space-y-2">
-              <p><strong>1. Google Cloud Console:</strong></p>
-              <p className="ml-4">• Acesse: <a href="https://console.cloud.google.com" target="_blank" className="text-blue-600 hover:underline">console.cloud.google.com</a></p>
-              <p className="ml-4">• Crie um projeto ou selecione existente</p>
-              
-              <p><strong>2. Ativar YouTube Data API v3:</strong></p>
-              <p className="ml-4">• APIs e Serviços → Biblioteca</p>
-              <p className="ml-4">• Busque "YouTube Data API v3" → Ativar</p>
-              
-              <p><strong>3. Criar Credenciais OAuth 2.0:</strong></p>
-              <p className="ml-4">• APIs e Serviços → Credenciais</p>
-              <p className="ml-4">• Criar Credenciais → ID do cliente OAuth 2.0</p>
-              <p className="ml-4">• Tipo: Aplicação da Web</p>
-              <p className="ml-4">• URIs de redirecionamento: <code className="bg-gray-200 px-1 rounded">http://localhost:3001/auth/youtube/callback</code></p>
-              
-              <p><strong>4. Obter Access Token:</strong></p>
-              <p className="ml-4">• Use OAuth 2.0 Playground: <a href="https://developers.google.com/oauthplayground" target="_blank" className="text-blue-600 hover:underline">developers.google.com/oauthplayground</a></p>
-              <p className="ml-4">• Scope: <code className="bg-gray-200 px-1 rounded">https://www.googleapis.com/auth/youtube.upload</code></p>
-              <p className="ml-4">• Autorize e obtenha o Access Token</p>
-            </div>
-            
-            <div className="bg-yellow-50 p-3 rounded border-l-4 border-yellow-400">
-              <p className="text-sm text-yellow-800">
-                <strong>⚠️ Importante:</strong> Access Tokens expiram (geralmente 1 hora). 
-                Para produção, implemente refresh token ou use Service Account.
-              </p>
-            </div>
-            
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => window.open('https://developers.google.com/oauthplayground/', '_blank')}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                🚀 Obter Access Token (OAuth Playground)
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => window.open('https://console.cloud.google.com/', '_blank')}
-              >
-                ⚙️ Google Cloud Console
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Credential Forms */}
       <div className="grid gap-6">
         {credentialSections.map((section) => (

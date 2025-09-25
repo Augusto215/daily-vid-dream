@@ -289,32 +289,25 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
     }
   }, [youtubeApiKey, addLog]);
 
-  // Seleciona vídeos curtos para teste (máximo 1 minuto)
-  const selectRandomVideos = useCallback((count: number = 2) => {
+  // Seleciona vídeos aleatórios (qualquer duração)
+  const selectRandomVideos = useCallback((count: number = 20) => {
     if (!videos || videos.length === 0) {
       addLog('Nenhum vídeo disponível no Google Drive');
       return [];
     }
 
-    // Filtra apenas vídeos muito curtos (máximo 1 minuto = 60.000 ms)
+    // Filtra apenas arquivos de vídeo válidos (sem restrição de duração)
     const videoFiles = videos.filter(video => {
       if (!video.mimeType?.startsWith('video/') || !video.webContentLink) {
         return false;
       }
       
-      // Verifica duração se disponível
-      if (video.videoMediaMetadata?.durationMillis) {
-        const durationMs = parseInt(video.videoMediaMetadata.durationMillis);
-        const maxDuration = 1 * 60 * 1000; // 1 minuto em ms
-        return durationMs <= maxDuration;
-      }
-      
-      // Se não tem metadata de duração, não inclui (para garantir que seja curto)
-      return false;
+      // Aceita qualquer vídeo com metadata ou sem metadata de duração
+      return true;
     });
 
     if (videoFiles.length === 0) {
-      addLog('Nenhum vídeo curto (≤1min) encontrado no Google Drive');
+      addLog('Nenhum arquivo de vídeo encontrado no Google Drive');
       return [];
     }
 
@@ -322,7 +315,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
     const shuffled = [...videoFiles].sort(() => Math.random() - 0.5);
     const selected = shuffled.slice(0, Math.min(count, videoFiles.length));
     
-    addLog(`Selecionados ${selected.length} vídeos curtos de ${videoFiles.length} disponíveis (≤1min)`);
+    addLog(`Selecionados ${selected.length} arquivos de ${videoFiles.length} disponíveis`);
     selected.forEach((video, index) => {
       const duration = video.videoMediaMetadata?.durationMillis 
         ? `${Math.round(parseInt(video.videoMediaMetadata.durationMillis) / 1000)}s`
@@ -459,7 +452,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
       };
       
     } catch (error) {
-      addLog(`❌ Erro na combinação real dos vídeos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      addLog(`❌ Erro na combinação real dos arquivos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       return null;
     }
   }, [addLog, getAccessToken, isAuthenticated]);
@@ -549,22 +542,24 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog('⚠️ Chave da OpenAI não fornecida - pulando geração de script inicial');
       }
 
-      // 2. Seleciona apenas 2 vídeos muito curtos para combinação real
-      const selectedVideos = selectRandomVideos(2);
+      // 2. Seleciona até 20 arquivos para combinação real
+      const selectedVideos = selectRandomVideos(20);
       if (selectedVideos.length === 0) {
-        throw new Error('Nenhum vídeo curto (≤1min) selecionado para combinação');
+        throw new Error('Nenhum arquivo selecionado para combinação');
       }
 
       if (selectedVideos.length < 2) {
-        addLog(`⚠️  Apenas ${selectedVideos.length} vídeo encontrado, mas continuando...`);
+        addLog(`⚠️  Apenas ${selectedVideos.length} arquivo encontrado, mas continuando...`);
+      } else if (selectedVideos.length === 20) {
+        addLog(`✅ Máximo de 20 arquivos selecionados para combinação`);
       }
 
-      // 2. Chama o backend para fazer download + combinação com FFmpeg real
+      // 3. Chama o backend para fazer download + combinação com FFmpeg real
       addLog('🔄 Enviando para backend: download + FFmpeg...');
       const result = await combineVideosWithFFmpeg(selectedVideos, schedule.id);
       
       if (!result || !result.downloadUrl) {
-        throw new Error('Falha na combinação real dos vídeos com FFmpeg');
+        throw new Error('Falha na combinação real dos arquivos com FFmpeg');
       }
 
       // 3. Script já foi gerado automaticamente no backend durante a combinação
