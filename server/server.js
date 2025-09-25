@@ -138,15 +138,15 @@ async function generateVideoScript(prompt, options = {}, apiKey) {
     });
 
     const {
-      theme = 'motivacional',
-      duration = '60 segundos',
-      style = 'casual e engajante',
+      theme = 'motivacional para idosos',
+      duration = '10 minutos',
+      style = 'explicativo',
       language = 'português brasileiro'
     } = options;
 
-    const systemPrompt = `Você é um especialista em criação de roteiros para áudio/narração de vídeos motivacionais curtos. 
+    const systemPrompt = `Você é um especialista em criação de roteiros para áudio/narração de vídeos informativos grandes para idosos. 
 Crie textos que sejam:
-- CONCISOS e diretos (máximo 300-400 caracteres)
+- GRANDES E EXPLICATIVOS, de 2000 a 4000 caracteres
 - Fluidos e naturais para leitura em voz alta
 - Emocionalmente envolventes e motivacionais
 - Adequados para redes sociais
@@ -156,27 +156,27 @@ Crie textos que sejam:
 - SEM títulos, subtítulos ou formatação markdown
 - APENAS texto corrido para ser lido como narração`;
 
-    const userPrompt = `Crie um texto motivacional CONCISO para narração de vídeo com tema: ${theme}
+    const userPrompt = `Crie um texto motivacional explicativo para narração de vídeo com tema: ${theme}
     
 Baseado no seguinte contexto ou ideia: ${prompt}
 
 IMPORTANTE: 
-- MÁXIMO 300-400 CARACTERES (texto bem curto)
+- MÁXIMO 2000-4000 CARACTERES (texto longo)
 - Gere APENAS o texto corrido, sem títulos, sem formatação, sem estruturas markdown
 - O texto deve fluir naturalmente para ser lido em voz alta
-- Seja direto, impactante e motivacional
+- Seja explicativo, impactante e motivacional
 - Foque no essencial da mensagem
 - O texto será convertido em áudio, então priorize fluidez na leitura
 - Não use asteriscos, hashtags, números ou qualquer formatação especial`;
 
     console.log('Generating video script with OpenAI...');
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      max_tokens: 200, // Reduced to generate shorter scripts
+      max_tokens: 1800, // Reduced to generate shorter scripts
       temperature: 0.8,
     });
 
@@ -654,8 +654,8 @@ app.post('/api/generate-script', async (req, res) => {
       prompt, 
       openaiApiKey,
       elevenLabsApiKey,
-      theme = 'motivacional',
-      duration = '60 segundos',
+      theme = 'informativo',
+      duration = '10 minutos',
       style = 'casual e engajante',
       language = 'português brasileiro'
     } = req.body;
@@ -830,9 +830,9 @@ app.post('/api/combine-videos', async (req, res) => {
         const durationText = totalDuration > 60 ? `${Math.round(totalDuration/60)} minutos` : `${Math.round(totalDuration)} segundos`;
         
         // Modified prompt to generate shorter scripts for ElevenLabs quota
-        const prompt = `Crie um roteiro CONCISO para um vídeo motivacional com os seguintes vídeos: ${videoContext}. 
+        const prompt = `Crie um roteiro longo para um vídeo motivacional com os seguintes vídeos: ${videoContext}. 
         O vídeo tem duração de ${durationText}. 
-        Crie uma mensagem motivacional impactante e direta em no máximo 300 caracteres.`;
+        Crie uma mensagem motivacional impactante e direta em no máximo 4000 caracteres.`;
         
         const scriptResult = await generateVideoScript(prompt, {
           theme: 'motivacional',
