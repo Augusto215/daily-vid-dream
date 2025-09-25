@@ -139,14 +139,14 @@ async function generateVideoScript(prompt, options = {}, apiKey) {
 
     const {
       theme = 'motivacional para idosos',
-      duration = '10 minutos',
+      duration = '20 minutos',
       style = 'explicativo',
       language = 'português brasileiro'
     } = options;
 
     const systemPrompt = `Você é um especialista em criação de roteiros para áudio/narração de vídeos informativos grandes para idosos. 
 Crie textos que sejam:
-- GRANDES E EXPLICATIVOS, de 2000 a 4000 caracteres
+- GRANDES E EXPLICATIVOS, de 7000 a 9000 caracteres
 - Fluidos e naturais para leitura em voz alta
 - Emocionalmente envolventes e motivacionais
 - Adequados para redes sociais

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useGoogleDrive } from './useGoogleDrive';
 
+const numberVideos = 100;
+
 // Importa o tipo DriveVideo do hook
 interface DriveVideo {
   id: string;
@@ -290,7 +292,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
   }, [youtubeApiKey, addLog]);
 
   // Seleciona vídeos aleatórios (qualquer duração)
-  const selectRandomVideos = useCallback((count: number = 20) => {
+  const selectRandomVideos = useCallback((count: number = numberVideos) => {
     if (!videos || videos.length === 0) {
       addLog('Nenhum vídeo disponível no Google Drive');
       return [];
@@ -542,16 +544,16 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog('⚠️ Chave da OpenAI não fornecida - pulando geração de script inicial');
       }
 
-      // 2. Seleciona até 20 arquivos para combinação real
-      const selectedVideos = selectRandomVideos(20);
+      // 2. Seleciona até ${numberVideos} arquivos para combinação real
+      const selectedVideos = selectRandomVideos(numberVideos);
       if (selectedVideos.length === 0) {
         throw new Error('Nenhum arquivo selecionado para combinação');
       }
 
       if (selectedVideos.length < 2) {
         addLog(`⚠️  Apenas ${selectedVideos.length} arquivo encontrado, mas continuando...`);
-      } else if (selectedVideos.length === 20) {
-        addLog(`✅ Máximo de 20 arquivos selecionados para combinação`);
+      } else if (selectedVideos.length === numberVideos) {
+        addLog(`✅ Máximo de ${numberVideos} arquivos selecionados para combinação`);
       }
 
       // 3. Chama o backend para fazer download + combinação com FFmpeg real
