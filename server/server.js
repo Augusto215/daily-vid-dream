@@ -148,7 +148,7 @@ async function generateVideoScript(prompt, options = {}, apiKey) {
 
     const systemPrompt = `Você é um especialista em criação de roteiros para áudio/narração de vídeos informativos grandes para idosos. 
 Crie textos que sejam:
-- GRANDES E EXPLICATIVOS, de 7000 a 9000 caracteres
+- GRANDES E EXPLICATIVOS, de 16000 a 20000 caracteres
 - Fluidos e naturais para leitura em voz alta
 - Emocionalmente envolventes e motivacionais
 - Adequados para redes sociais
@@ -178,7 +178,7 @@ IMPORTANTE:
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      max_tokens: 1800, // Reduced to generate shorter scripts
+      max_tokens: 6500, // Reduced to generate shorter scripts
       temperature: 0.8,
     });
 
