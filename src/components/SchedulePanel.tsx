@@ -199,27 +199,12 @@ export const SchedulePanel = () => {
     }
   };
 
-  // Função para baixar áudio gerado separadamente
+  // Função para baixar áudio gerado separadamente (DESABILITADA - áudio é temporário)
   const handleDownloadAudio = (video: any) => {
-    if (!video.generatedAudio || !video.generatedAudio.downloadUrl) {
-      console.warn('Áudio não disponível para download');
-      return;
-    }
-    
-    // Cria URL completa para download do áudio
-    const audioUrl = video.generatedAudio.downloadUrl.startsWith('http') 
-      ? video.generatedAudio.downloadUrl 
-      : `http://localhost:3001${video.generatedAudio.downloadUrl}`;
-    
-    // Cria elemento temporário para download
-    const link = document.createElement('a');
-    link.href = audioUrl;
-    link.download = video.generatedAudio.filename || `audio_${video.scheduleId}_${video.id}.mp3`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    console.log('Download do áudio iniciado:', audioUrl);
+    // Audio files are now temporary and deleted after use
+    console.warn('Áudio não está mais disponível para download separado - foi integrado ao vídeo e excluído');
+    alert('ℹ️ O áudio foi integrado automaticamente ao vídeo final e não está mais disponível para download separado. Baixe o vídeo completo que já inclui o áudio gerado.');
+    return;
   };
 
   // Função para deletar vídeo preparado

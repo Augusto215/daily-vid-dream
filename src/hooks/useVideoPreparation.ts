@@ -40,13 +40,7 @@ interface PreparedVideo {
     tokensUsed: number;
     generatedAt: string;
   };
-  generatedAudio?: {
-    filename: string;
-    downloadUrl: string;
-    fileSize: number;
-    voiceId: string;
-    generatedAt: string;
-  };
+  // generatedAudio removed - audio files are now temporary and deleted after use
   youtubeUpload?: {
     videoId: string;
     videoUrl: string;
@@ -420,16 +414,15 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog(`🤖 Tokens utilizados: ${result.generatedScript.tokensUsed}`);
       }
       
-      // Se um áudio foi gerado no backend, exibe nos logs
-      if (result.generatedAudio) {
-        addLog(`🎵 === ÁUDIO GERADO NO BACKEND ===`);
-        addLog(`🎤 Arquivo: ${result.generatedAudio.filename}`);
-        addLog(`💾 Tamanho: ${Math.round(result.generatedAudio.fileSize / 1024)}KB`);
-        addLog(`🎭 Voz: ${result.generatedAudio.voiceId}`);
-        addLog(`📥 Download: ${BACKEND_URL.replace('/api', '')}${result.generatedAudio.downloadUrl}`);
+      // Informações sobre áudio (agora temporário)
+      if (result.hasAudio && elevenLabsApiKey) {
+        addLog(`🎵 === ÁUDIO GERADO E INTEGRADO ===`);
+        addLog(`🎤 Áudio foi gerado e integrado ao vídeo final`);
+        addLog(`🗑️ Arquivo de áudio temporário foi excluído após uso`);
+        addLog(`� Apenas o vídeo final está disponível para download`);
         addLog(`🎵 === FIM DO ÁUDIO ===`);
-      } else if (elevenLabsApiKey) {
-        addLog(`⚠️ ElevenLabs configurado mas áudio não foi gerado (verifique logs do servidor)`);
+      } else if (elevenLabsApiKey && !result.hasAudio) {
+        addLog(`⚠️ ElevenLabs configurado mas áudio não foi usado no vídeo final (verifique logs do servidor)`);
       } else {
         addLog(`⚠️ ElevenLabs API key não fornecida - áudio não foi gerado`);
       }
@@ -457,7 +450,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         hasAudio: result.hasAudio || false,
         hasBackgroundMusic: result.hasBackgroundMusic || false,
         generatedScript: result.generatedScript || null,
-        generatedAudio: result.generatedAudio || null,
+        // generatedAudio is no longer saved as it's temporary and deleted after use
         fileSize: result.fileSize,
         totalDuration: result.totalDuration,
         videosProcessed: result.videosProcessed
@@ -591,7 +584,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         hasAudio: result.hasAudio || false,
         hasBackgroundMusic: result.hasBackgroundMusic || false,
         generatedScript: result.generatedScript || generatedScript || undefined,
-        generatedAudio: result.generatedAudio || undefined
+        // generatedAudio is no longer included as it's temporary
       };
 
       setPreparedVideos(prev => [...prev, preparedVideo]);
@@ -634,9 +627,8 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         }
       }
       
-      if (preparedVideo.generatedAudio) {
-        addLog(`🎤 Arquivo de áudio separado também disponível para download individual.`);
-      }
+      // Audio files are no longer available for separate download (they're temporary)
+      addLog(`🎤 Arquivo de áudio foi integrado ao vídeo e excluído (não disponível separadamente).`);
       
       // Log summary of all available files
       try {

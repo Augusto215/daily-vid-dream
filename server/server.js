@@ -995,6 +995,14 @@ app.post('/api/combine-videos', async (req, res) => {
         // Remove the original video file to save space
         await fs.remove(outputPath);
         
+        // Clean up temporary audio file immediately after use
+        try {
+          await fs.remove(audioPath);
+          console.log(`🗑️ Temporary audio file cleaned up: ${generatedAudio.filename}`);
+        } catch (cleanupError) {
+          console.error(`⚠️ Failed to clean up temporary audio file:`, cleanupError.message);
+        }
+        
         console.log(`🎉 Final video with narration created: ${combinedFilename}`);
         console.log(`🔇 Original video audio removed`);
         console.log(`🎤 Generated narration audio added`);
@@ -1003,6 +1011,16 @@ app.post('/api/combine-videos', async (req, res) => {
       } catch (combineError) {
         console.error(`❌ Erro ao substituir áudio do vídeo:`, combineError.message);
         console.log(`⚠️ Mantendo vídeo original com áudio original`);
+        
+        // Clean up temporary audio file even if combination failed
+        try {
+          const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
+          await fs.remove(audioPath);
+          console.log(`🗑️ Temporary audio file cleaned up after failed combination: ${generatedAudio.filename}`);
+        } catch (cleanupError) {
+          console.error(`⚠️ Failed to clean up temporary audio file after error:`, cleanupError.message);
+        }
+        
         // Keep the original video if audio replacement fails
       }
     } else {
@@ -1012,6 +1030,18 @@ app.post('/api/combine-videos', async (req, res) => {
       } else if (!generatedAudio.filename) {
         console.log(`📢 Generated audio has no filename`);
       }
+      
+      // Clean up temporary audio file even if not used
+      if (generatedAudio && generatedAudio.filename) {
+        try {
+          const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
+          await fs.remove(audioPath);
+          console.log(`🗑️ Temporary audio file cleaned up (unused): ${generatedAudio.filename}`);
+        } catch (cleanupError) {
+          console.error(`⚠️ Failed to clean up unused temporary audio file:`, cleanupError.message);
+        }
+      }
+      
       console.log(`🎬 Proceeding with original video: ${finalVideoFilename}`);
       console.log(`⚠️ === AUDIO REPLACEMENT SKIPPED ===\n`);
     }
@@ -1080,22 +1110,22 @@ app.post('/api/combine-videos', async (req, res) => {
         name: f.originalName,
         duration: Math.round(f.duration)
       })),
-      generatedScript: generatedScript, // Include the generated script in response
-      generatedAudio: generatedAudio // Include the generated audio in response
+      generatedScript: generatedScript // Include the generated script in response
+      // generatedAudio is not included as it's temporary and deleted after use
     });
     
-    // Keep files permanently - no automatic cleanup
-    console.log(`📁 Video saved permanently: ${finalVideoFilename}`);
+    // Keep video files for 24 hours - no automatic cleanup for videos
+    console.log(`📁 Video saved for 24h: ${finalVideoFilename}`);
     console.log(`💾 File will remain available for download at: /api/download/${finalVideoFilename}`);
     
     if (generatedAudio && generatedAudio.filename) {
-      console.log(`🎵 Audio saved permanently: ${generatedAudio.filename}`);
-      console.log(`💾 Audio will remain available for download at: /api/download/${generatedAudio.filename}`);
+      console.log(`🎵 Audio was used temporarily and cleaned up (not available for download)`);
     }
     
     // Print list of all available files for download
     try {
       console.log(`\n📋 === LISTA COMPLETA DE ARQUIVOS DISPONÍVEIS ===`);
+      console.log(`ℹ️ Nota: Arquivos de áudio são temporários e excluídos após uso na combinação`);
       const allFiles = await fs.readdir(OUTPUT_DIR);
       const fileDetails = [];
       
@@ -1148,7 +1178,7 @@ app.post('/api/combine-videos', async (req, res) => {
       console.error('❌ Erro ao listar arquivos:', listError.message);
     }
     
-    // Optional: Clean up old files only after 24 hours (86400000 ms)
+    // Optional: Clean up old video files only after 24 hours (86400000 ms)
     setTimeout(() => {
       // Clean up the final video file after 24 hours
       fs.remove(finalVideoPath).catch(() => {
@@ -1156,15 +1186,8 @@ app.post('/api/combine-videos', async (req, res) => {
       });
       console.log(`🗑️ Auto-cleanup: Removed ${finalVideoFilename} after 24 hours`);
       
-      // Also clean up audio file if it was generated
-      if (generatedAudio && generatedAudio.filename) {
-        const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
-        fs.remove(audioPath).catch(() => {
-          // Ignore errors - file might have been manually deleted
-        });
-        console.log(`🗑️ Auto-cleanup: Removed ${generatedAudio.filename} after 24 hours`);
-      }
-    }, 86400000); // Remove after 24 hours instead of 5 minutes
+      // Audio files are cleaned up immediately after use, no need for delayed cleanup
+    }, 86400000); // Remove after 24 hours
     
   } catch (error) {
     console.error(`Combine videos job ${jobId} failed:`, error.message);
@@ -1173,6 +1196,17 @@ app.post('/api/combine-videos', async (req, res) => {
     const jobTempDir = path.join(TEMP_DIR, jobId);
     if (await fs.pathExists(jobTempDir)) {
       await fs.remove(jobTempDir);
+    }
+    
+    // Clean up temporary audio file if it was generated
+    if (generatedAudio && generatedAudio.filename) {
+      try {
+        const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
+        await fs.remove(audioPath);
+        console.log(`🗑️ Temporary audio file cleaned up after error: ${generatedAudio.filename}`);
+      } catch (cleanupError) {
+        console.error(`⚠️ Failed to clean up temporary audio file after error:`, cleanupError.message);
+      }
     }
     
     res.status(500).json({
