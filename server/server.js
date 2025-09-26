@@ -22,10 +22,12 @@ app.use(express.json());
 // Diretórios temporários
 const TEMP_DIR = path.join(__dirname, 'temp');
 const OUTPUT_DIR = path.join(__dirname, 'output');
+const AUDIOS_DIR = path.join(__dirname, 'audios');
 
 // Ensure directories exist
 fs.ensureDirSync(TEMP_DIR);
 fs.ensureDirSync(OUTPUT_DIR);
+fs.ensureDirSync(AUDIOS_DIR);
 
 // Helper function to download video from Google Drive
 async function downloadVideoFromGoogleDrive(videoId, accessToken, filePath) {
@@ -1497,63 +1499,58 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
       console.log(`Output: ${path.basename(outputPath)}`);
       console.log(`Video duration: ${videoDuration}s`);
       
-      // URL da música de fundo (comentada - não usamos arquivo externo)
-      // const backgroundMusicUrl = 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav';
-      const tempMusicPath = path.join(path.dirname(videoPath), 'temp_background_music.mp3');
+      // Usar arquivo de música de fundo específico
+      const backgroundMusicPath = path.join(AUDIOS_DIR, 'background.mp3');
       
-      // Alternativamente, você pode usar uma música local ou gerar uma com AI
-      // Por enquanto, vamos criar um tom de fundo suave usando FFmpeg
-      console.log('🎼 Generating ambient background music...');
+      // Verificar se o arquivo de música existe
+      if (!await fs.pathExists(backgroundMusicPath)) {
+        throw new Error(`Background music file not found: ${backgroundMusicPath}`);
+      }
       
-      // Gerar música de fundo usando FFmpeg (tom suave e ambiente)
-      await new Promise((musicResolve, musicReject) => {
-        ffmpeg()
-          .input('anullsrc=channel_layout=stereo:sample_rate=44100')
-          .inputOptions(['-f', 'lavfi'])
-          .audioFilters([
-            // Criar um tom suave de fundo
-            'sine=frequency=220:duration=' + videoDuration, // Nota Lá (220 Hz)
-            'volume=0.1', // Volume muito baixo para não interferir
-            'highpass=f=100', // Filtro passa-alta para remover frequências muito baixas
-            'lowpass=f=1000' // Filtro passa-baixa para suavizar
-          ])
-          .audioCodec('mp3')
-          .audioBitrate('128k')
-          .duration(videoDuration)
-          .output(tempMusicPath)
-          .on('start', (commandLine) => {
-            console.log('🎵 Background music generation command:', commandLine.substring(0, 100) + '...');
-          })
-          .on('end', () => {
-            console.log('✅ Background music generated successfully');
-            musicResolve();
-          })
-          .on('error', (err) => {
-            console.error('❌ Background music generation error:', err.message);
-            musicReject(err);
-          })
-          .run();
-      });
+      console.log(`🎼 Using background music file: ${backgroundMusicPath}`);
+      
+      // Obter duração da música de fundo
+      const musicDuration = await getAudioDuration(backgroundMusicPath);
+      console.log(`🎵 Background music duration: ${musicDuration}s`);
+      console.log(`📹 Video duration: ${videoDuration}s`);
+      
+      // Preparar filtros de áudio baseado na duração
+      let audioFilters = [];
+      
+      if (musicDuration < videoDuration) {
+        // Se a música é mais curta que o vídeo, fazer loop
+        const loopCount = Math.ceil(videoDuration / musicDuration);
+        console.log(`🔄 Music will loop ${loopCount} times to match video duration`);
+        audioFilters = [
+          `[1:a]aloop=loop=${loopCount - 1}:size=${Math.floor(musicDuration * 44100)}[bg_music_loop]`,
+          '[0:a]volume=1.0[main_audio]',
+          '[bg_music_loop]volume=0.02[bg_music]',
+          '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]'
+        ];
+      } else {
+        // Se a música é mais longa ou igual ao vídeo, cortar na duração do vídeo
+        console.log(`✂️ Music will be trimmed to match video duration`);
+        audioFilters = [
+          '[0:a]volume=1.0[main_audio]',
+          `[1:a]atrim=0:${videoDuration},volume=0.05[bg_music]`,
+          '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]'
+        ];
+      }
       
       console.log('🎬🎵 Mixing video with background music...');
       
       // Combinar vídeo com música de fundo
       ffmpeg()
         .input(videoPath) // Vídeo principal (já com narração se houver)
-        .input(tempMusicPath) // Música de fundo gerada
-        .complexFilter([
-          // Ajustar volumes: manter áudio original (narração) em volume normal,
-          // música de fundo em volume muito baixo
-          '[0:a]volume=1.0[main_audio]', // Áudio principal (narração) volume normal
-          '[1:a]volume=0.15[bg_music]', // Música de fundo volume baixo (15%)
-          '[main_audio][bg_music]amix=inputs=2:duration=shortest[mixed_audio]' // Misturar os áudios
-        ])
+        .input(backgroundMusicPath) // Música de fundo específica
+        .complexFilter(audioFilters)
         .outputOptions([
           '-map', '0:v', // Usar vídeo da primeira entrada
           '-map', '[mixed_audio]', // Usar áudio mixado
           '-c:v', 'copy', // Não recodificar vídeo para economizar tempo
           '-c:a', 'aac',
-          '-b:a', '192k'
+          '-b:a', '192k',
+          '-shortest' // Garantir que não ultrapasse a duração do vídeo
         ])
         .output(outputPath)
         .on('start', (commandLine) => {
@@ -1565,26 +1562,12 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
           }
         })
         .on('end', async () => {
-          // Limpar arquivo temporário de música
-          try {
-            await fs.remove(tempMusicPath);
-            console.log('🧹 Temporary music file cleaned up');
-          } catch (cleanupError) {
-            console.warn('⚠️ Failed to cleanup temp music file:', cleanupError.message);
-          }
-          
           console.log('🎉 Video with background music created successfully!');
           console.log(`🎬🎵 Final video with background music: ${path.basename(outputPath)}`);
+          console.log(`🎵 Used background music: ${path.basename(backgroundMusicPath)}`);
           resolve(outputPath);
         })
-        .on('error', async (err) => {
-          // Limpar arquivo temporário em caso de erro
-          try {
-            await fs.remove(tempMusicPath);
-          } catch (cleanupError) {
-            console.warn('⚠️ Failed to cleanup temp music file after error:', cleanupError.message);
-          }
-          
+        .on('error', (err) => {
           console.error('❌ Background music mixing error:', err.message);
           reject(err);
         })
