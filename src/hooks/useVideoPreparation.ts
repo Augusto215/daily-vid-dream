@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useGoogleDrive } from './useGoogleDrive';
 
-const numberVideos = 100;
+const numberVideos = 2;
 
 // Importa o tipo DriveVideo do hook
 interface DriveVideo {
@@ -33,6 +33,7 @@ interface PreparedVideo {
   videosProcessed?: number;
   error?: string;
   hasAudio?: boolean; // Indicates if the final video includes generated audio
+  hasBackgroundMusic?: boolean; // Indicates if the final video includes background music
   generatedScript?: {
     script: string;
     theme: string;
@@ -438,6 +439,14 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog(`🎬🎵 Vídeo final combinado com áudio gerado! Duração ajustada automaticamente.`);
       }
       
+      // Indica se o vídeo final inclui música de fundo
+      if (result.hasBackgroundMusic) {
+        addLog(`🎵🎶 Vídeo final inclui MÚSICA DE FUNDO gerada automaticamente!`);
+        addLog(`🎼 Tom ambiente de 220Hz mixado com volume baixo para não interferir.`);
+      } else {
+        addLog(`⚠️ Música de fundo não foi adicionada (verifique logs do servidor)`);
+      }
+      
       // Usa a URL de download fornecida pelo backend
       const downloadUrl = `${BACKEND_URL.replace('/api', '')}${result.downloadUrl}`;
       addLog(`📥 URL de download: ${downloadUrl}`);
@@ -446,6 +455,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
       return {
         downloadUrl,
         hasAudio: result.hasAudio || false,
+        hasBackgroundMusic: result.hasBackgroundMusic || false,
         generatedScript: result.generatedScript || null,
         generatedAudio: result.generatedAudio || null,
         fileSize: result.fileSize,
@@ -579,6 +589,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         totalDuration: result.totalDuration,
         videosProcessed: result.videosProcessed,
         hasAudio: result.hasAudio || false,
+        hasBackgroundMusic: result.hasBackgroundMusic || false,
         generatedScript: result.generatedScript || generatedScript || undefined,
         generatedAudio: result.generatedAudio || undefined
       };
@@ -592,20 +603,32 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog(`⏱️ Duração do vídeo foi ajustada para coincidir com a duração do áudio.`);
       }
       
+      if (preparedVideo.hasBackgroundMusic) {
+        addLog(`🎵🎶 MÚSICA DE FUNDO ADICIONADA! O vídeo inclui música ambiente de fundo.`);
+      }
+      
       if (preparedVideo.generatedScript || generatedScript) {
         const scriptToUse = preparedVideo.generatedScript || generatedScript;
         addLog(`📝 Script foi gerado com ${scriptToUse.tokensUsed} tokens!`);
         
-        if (preparedVideo.hasAudio) {
+        if (preparedVideo.hasAudio && preparedVideo.hasBackgroundMusic) {
+          addLog(`🎬🎵🎤🎶 Vídeo + Áudio + Script + Música prontos! Vídeo completo com narração e música de fundo.`);
+        } else if (preparedVideo.hasAudio) {
           addLog(`🎬🎵🎤 Vídeo + Áudio + Script prontos! O vídeo já tem narração incorporada.`);
+        } else if (preparedVideo.hasBackgroundMusic) {
+          addLog(`🎬📝🎶 Vídeo + Script + Música prontos! Use o script para legendas/descrição.`);
         } else {
           addLog(`🎬📝 Vídeo + Script prontos! Use o script para legendas/descrição.`);
         }
       } else {
         addLog(`⚠️ Script não foi gerado (verifique se a chave da OpenAI está configurada)`);
         
-        if (preparedVideo.hasAudio) {
+        if (preparedVideo.hasAudio && preparedVideo.hasBackgroundMusic) {
+          addLog(`🎬🎵🎶 Vídeo completo com áudio e música pronto para download!`);
+        } else if (preparedVideo.hasAudio) {
           addLog(`🎬🎵 Vídeo com áudio pronto para download!`);
+        } else if (preparedVideo.hasBackgroundMusic) {
+          addLog(`🎬🎶 Vídeo com música de fundo pronto para download!`);
         } else {
           addLog(`🎬 Vídeo pronto para download!`);
         }
@@ -613,6 +636,28 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
       
       if (preparedVideo.generatedAudio) {
         addLog(`🎤 Arquivo de áudio separado também disponível para download individual.`);
+      }
+      
+      // Log summary of all available files
+      try {
+        addLog(`\n📋 === LISTANDO TODOS OS ARQUIVOS DISPONÍVEIS ===`);
+        const summaryResponse = await fetch(`${BACKEND_URL}/files/summary`);
+        if (summaryResponse.ok) {
+          const summaryData = await summaryResponse.json();
+          if (summaryData.success) {
+            const { summary } = summaryData;
+            addLog(`📊 Total de arquivos: ${summary.totalFiles}`);
+            addLog(`📹 Vídeos: ${summary.videoCount} | 🎵 Com música: ${summary.withMusicCount} | 🔊 Áudios: ${summary.audioCount}`);
+            addLog(`💾 Espaço total: ${summary.totalSizeMB.toFixed(1)}MB`);
+            if (summary.newestFile) {
+              addLog(`🆕 Arquivo mais recente: ${summary.newestFile.filename} (${summary.newestFile.sizeMB}MB)`);
+            }
+            addLog(`🔗 Acesse a aba "Downloads" para gerenciar todos os arquivos`);
+          }
+        }
+        addLog(`📋 === FIM DA LISTA ===\n`);
+      } catch (summaryError) {
+        addLog(`⚠️ Erro ao obter resumo de arquivos: ${summaryError instanceof Error ? summaryError.message : 'Erro desconhecido'}`);
       }
 
       // 5. Upload automático para YouTube (se API key estiver disponível e válida)

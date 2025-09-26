@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useVideoPreparation } from "@/hooks/useVideoPreparation";
 import { useGoogleDrive } from "@/hooks/useGoogleDrive";
 import { useCredentials } from "@/hooks/useCredentials";
+import { FileManager } from "./FileManager";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Calendar, 
   Clock, 
@@ -25,7 +27,8 @@ import {
   Terminal,
   Download,
   FileText,
-  Youtube
+  Youtube,
+  HardDrive
 } from "lucide-react";
 
 interface ScheduleEntry {
@@ -37,9 +40,51 @@ interface ScheduleEntry {
   lastRun?: string;
 }
 
+interface FilesSummary {
+  totalFiles: number;
+  totalSizeMB: number;
+  videoCount: number;
+  audioCount: number;
+  withMusicCount: number;
+  newestFile?: {
+    filename: string;
+    createdAt: string;
+    sizeMB: number;
+  };
+  lastGenerated?: string;
+}
+
 export const SchedulePanel = () => {
   // State for expanded script logs
   const [expandedScripts, setExpandedScripts] = useState<Set<number>>(new Set());
+  
+  // State for active tab
+  const [activeTab, setActiveTab] = useLocalStorage('schedule-active-tab', 'scheduler');
+  
+  // State for files summary
+  const [filesSummary, setFilesSummary] = useState<FilesSummary | null>(null);
+  
+  // Function to fetch files summary
+  const fetchFilesSummary = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/files/summary');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFilesSummary(data.summary);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching files summary:', error);
+    }
+  };
+
+  // Fetch files summary on component mount and when tab changes to scheduler
+  useEffect(() => {
+    if (activeTab === 'scheduler') {
+      fetchFilesSummary();
+    }
+  }, [activeTab]);
   
   // Persist schedule form state
   const [isAutoEnabled, setIsAutoEnabled] = useLocalStorage('daily-dream-auto-enabled', true);
@@ -297,8 +342,60 @@ export const SchedulePanel = () => {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Auto Generation Toggle */}
+    <div className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="scheduler" className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Agendamento
+          </TabsTrigger>
+          <TabsTrigger value="downloads" className="flex items-center gap-2">
+            <HardDrive className="w-4 h-4" />
+            Downloads
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="scheduler" className="space-y-8">
+          {/* Quick Files Overview */}
+          <Card className="bg-gradient-card border-border/50 shadow-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-primary" />
+                Arquivos Disponíveis
+                <Badge 
+                  variant="outline" 
+                  className="ml-auto cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                  onClick={() => setActiveTab('downloads')}
+                >
+                  Ver Todos
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Acesso rápido aos vídeos e áudios gerados
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filesSummary ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{filesSummary.videoCount}</div>
+                    <div className="text-sm text-muted-foreground">Vídeos</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{filesSummary.totalSizeMB.toFixed(1)}MB</div>
+                    <div className="text-sm text-muted-foreground">Espaço Total</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-4">
+                  <Loader className="w-4 h-4 animate-spin mr-2" />
+                  <span className="text-sm text-muted-foreground">Carregando informações...</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Auto Generation Toggle */}
       <Card className="bg-gradient-card border-border/50 shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -652,154 +749,15 @@ export const SchedulePanel = () => {
                 </div>
               )}
             </div>
-
-            {/* Prepared Videos Summary */}
-            {allPreparedVideos.length > 0 && (
-              <div className="pt-4 border-t border-border/50">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-medium">Prepared Videos ({allPreparedVideos.length})</h4>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleClearOldVideos}
-                      className="text-xs"
-                    >
-                      Clear Old (7+ days)
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setPersistedPreparedVideos([])}
-                      className="text-xs text-destructive hover:text-destructive"
-                    >
-                      Clear All
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {allPreparedVideos.map((video) => (
-                    <div 
-                      key={video.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-secondary/20 border border-border/30"
-                    >
-                      <div className="flex items-center gap-3">
-                        {video.status === 'ready' && <FileVideo className="w-4 h-4 text-green-500" />}
-                        {video.status === 'preparing' && <Loader className="w-4 h-4 animate-spin text-yellow-500" />}
-                        {video.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
-                        
-                        <div>
-                          <div className="text-sm font-medium flex items-center gap-2">
-                            <span>Schedule {video.scheduleId} • {video.status}</span>
-                            {persistedPreparedVideos.some(pv => pv.id === video.id) && (
-                              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/30">
-                                Saved
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {video.sourceVideos.length > 0 && (
-                              <span>Sources: {video.sourceVideos.slice(0, 2).join(', ')}</span>
-                            )}
-                            {video.sourceVideos.length > 2 && (
-                              <span> +{video.sourceVideos.length - 2} more</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Created: {new Date(video.createdAt).toLocaleString()}
-                          </div>
-                          {video.generatedScript && (
-                            <div className="text-xs text-green-600 mt-1">
-                              📝 Script gerado automaticamente ({video.generatedScript.tokensUsed} tokens)
-                            </div>
-                          )}
-                          {video.hasAudio && (
-                            <div className="text-xs text-purple-600 mt-1">
-                              🎵 Vídeo inclui áudio narrado automaticamente
-                            </div>
-                          )}
-                          {video.generatedAudio && (
-                            <div className="text-xs text-blue-600 mt-1">
-                              🎤 Arquivo de áudio disponível para download separado
-                            </div>
-                          )}
-                          {video.youtubeUpload && (
-                            <div className="text-xs text-red-600 mt-1">
-                              📺 Postado no YouTube automaticamente - ID: {video.youtubeUpload.videoId}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {video.status === 'ready' && (
-                        <div className="flex items-center gap-2">
-                          {video.generatedScript && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2 bg-blue-500/10 text-blue-600 border-blue-500/30 hover:bg-blue-500/20"
-                              onClick={() => {
-                                // Criar modal ou expandir para mostrar o script
-                                alert(video.generatedScript?.script);
-                              }}
-                            >
-                              <FileText className="w-3 h-3" />
-                              Ver Script
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className={`gap-2 ${
-                              video.hasAudio 
-                                ? "bg-purple-500/10 text-purple-600 border-purple-500/30 hover:bg-purple-500/20" 
-                                : "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
-                            }`}
-                            onClick={() => handleDownloadVideo(video)}
-                          >
-                            <Download className="w-3 h-3" />
-                            {video.hasAudio ? "MP4 + Áudio" : "Download MP4"}
-                          </Button>
-                          {video.generatedAudio && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2 bg-orange-500/10 text-orange-600 border-orange-500/30 hover:bg-orange-500/20"
-                              onClick={() => handleDownloadAudio(video)}
-                            >
-                              <Download className="w-3 h-3" />
-                              Áudio MP3
-                            </Button>
-                          )}
-                          {video.youtubeUpload && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2 bg-red-500/10 text-red-600 border-red-500/30 hover:bg-red-500/20"
-                              onClick={() => window.open(video.youtubeUpload.videoUrl, '_blank')}
-                            >
-                              <Youtube className="w-3 h-3" />
-                              Ver no YouTube
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDeletePreparedVideo(video.id)}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="downloads" className="space-y-6">
+          <FileManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

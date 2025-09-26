@@ -856,7 +856,7 @@ app.post('/api/combine-videos', async (req, res) => {
         
       } catch (error) {
         console.error(`Failed to download video ${video.name}:`, error.message);
-        // Continue with other videos instead of failing completely
+        // Continue with other videos instead of failing completamente
       }
     }
     
@@ -970,13 +970,16 @@ app.post('/api/combine-videos', async (req, res) => {
       outputPath
     );
     
+    console.log(`✅ Video concatenation completed successfully!`);
+    console.log(`📁 Concatenated video saved at: ${outputPath}`);
+    
     // If audio was generated, combine it with the video
     let finalVideoPath = outputPath;
     let finalVideoFilename = outputFilename;
     
     if (generatedAudio && generatedAudio.filename) {
       try {
-        console.log(`\n🎬� === REPLACING VIDEO AUDIO WITH GENERATED NARRATION ===`);
+        console.log(`\n🎬🎤 === REPLACING VIDEO AUDIO WITH GENERATED NARRATION ===`);
         
         const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
         const combinedFilename = `final_with_narration_${jobId}.mp4`;
@@ -995,13 +998,62 @@ app.post('/api/combine-videos', async (req, res) => {
         console.log(`🎉 Final video with narration created: ${combinedFilename}`);
         console.log(`🔇 Original video audio removed`);
         console.log(`🎤 Generated narration audio added`);
-        console.log(`🎬� === AUDIO REPLACEMENT COMPLETED ===\n`);
+        console.log(`🎬🎤 === AUDIO REPLACEMENT COMPLETED ===\n`);
         
       } catch (combineError) {
         console.error(`❌ Erro ao substituir áudio do vídeo:`, combineError.message);
         console.log(`⚠️ Mantendo vídeo original com áudio original`);
         // Keep the original video if audio replacement fails
       }
+    } else {
+      console.log(`\n⚠️ === SKIPPING AUDIO REPLACEMENT ===`);
+      if (!generatedAudio) {
+        console.log(`📢 No audio was generated (ElevenLabs failed or not configured)`);
+      } else if (!generatedAudio.filename) {
+        console.log(`📢 Generated audio has no filename`);
+      }
+      console.log(`🎬 Proceeding with original video: ${finalVideoFilename}`);
+      console.log(`⚠️ === AUDIO REPLACEMENT SKIPPED ===\n`);
+    }
+    
+    // Add background music to the final video (regardless of whether it has narration or not)
+    let hasBackgroundMusic = false;
+    try {
+      console.log(`\n🎵 === ADDING BACKGROUND MUSIC ===`);
+      console.log(`🎬 Current video file: ${finalVideoFilename}`);
+      console.log(`📁 Current video path: ${finalVideoPath}`);
+      
+      const musicFilename = `final_with_music_${jobId}.mp4`;
+      const musicPath = path.join(OUTPUT_DIR, musicFilename);
+      
+      console.log(`🎵 Target music video file: ${musicFilename}`);
+      console.log(`📁 Target music video path: ${musicPath}`);
+      
+      // Get video duration for background music
+      console.log(`⏱️ Getting video duration for background music...`);
+      const videoDuration = await getVideoDuration(finalVideoPath);
+      console.log(`⏱️ Video duration: ${videoDuration}s`);
+      
+      // Add background music
+      console.log(`🎼 Starting background music generation and mixing...`);
+      await addBackgroundMusicToVideo(finalVideoPath, musicPath, videoDuration);
+      
+      // Remove the version without background music
+      await fs.remove(finalVideoPath);
+      
+      // Update final paths to version with background music
+      finalVideoPath = musicPath;
+      finalVideoFilename = musicFilename;
+      
+      hasBackgroundMusic = true;
+      console.log(`🎵 Background music added successfully: ${musicFilename}`);
+      console.log(`🎬🎵 === FINAL VIDEO WITH BACKGROUND MUSIC COMPLETED ===\n`);
+      
+    } catch (musicError) {
+      console.error(`❌ Erro ao adicionar música de fundo:`, musicError.message);
+      console.log(`⚠️ Mantendo vídeo sem música de fundo`);
+      console.log(`📝 Stack trace: ${musicError.stack}`);
+      // Keep the video without background music if it fails
     }
     
     // Get file size after final processing
@@ -1023,6 +1075,7 @@ app.post('/api/combine-videos', async (req, res) => {
       totalDuration: Math.round(totalDuration),
       fileSize: `${Math.round(outputStats.size / (1024 * 1024))}MB`,
       hasAudio: !!generatedAudio, // Indicates if the final video includes generated audio
+      hasBackgroundMusic: hasBackgroundMusic, // Indicates that the final video includes background music
       processedVideos: downloadedFiles.map(f => ({
         name: f.originalName,
         duration: Math.round(f.duration)
@@ -1031,19 +1084,87 @@ app.post('/api/combine-videos', async (req, res) => {
       generatedAudio: generatedAudio // Include the generated audio in response
     });
     
-    // Clean up the files after some time (but not immediately since user might download them)
+    // Keep files permanently - no automatic cleanup
+    console.log(`📁 Video saved permanently: ${finalVideoFilename}`);
+    console.log(`💾 File will remain available for download at: /api/download/${finalVideoFilename}`);
+    
+    if (generatedAudio && generatedAudio.filename) {
+      console.log(`🎵 Audio saved permanently: ${generatedAudio.filename}`);
+      console.log(`💾 Audio will remain available for download at: /api/download/${generatedAudio.filename}`);
+    }
+    
+    // Print list of all available files for download
+    try {
+      console.log(`\n📋 === LISTA COMPLETA DE ARQUIVOS DISPONÍVEIS ===`);
+      const allFiles = await fs.readdir(OUTPUT_DIR);
+      const fileDetails = [];
+      
+      for (const filename of allFiles) {
+        try {
+          const filePath = path.join(OUTPUT_DIR, filename);
+          const stats = await fs.stat(filePath);
+          
+          if (stats.isFile()) {
+            let category = 'Outros';
+            if (filename.includes('final_with_music_')) {
+              category = '🎵 Vídeo com Música';
+            } else if (filename.includes('final_with_narration_')) {
+              category = '🎤 Vídeo com Narração';
+            } else if (filename.includes('combined_')) {
+              category = '🎬 Vídeo Concatenado';
+            } else if (filename.endsWith('.mp3')) {
+              category = '🔊 Áudio MP3';
+            } else if (filename.endsWith('.mp4')) {
+              category = '📹 Vídeo MP4';
+            }
+            
+            fileDetails.push({
+              filename,
+              category,
+              sizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100,
+              age: Math.round((Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60) * 100) / 100
+            });
+          }
+        } catch (fileError) {
+          // Skip files with errors
+        }
+      }
+      
+      // Sort by creation time (newest first)
+      fileDetails.sort((a, b) => a.age - b.age);
+      
+      fileDetails.forEach((file, index) => {
+        const isNew = index === 0 && file.filename === finalVideoFilename;
+        const marker = isNew ? '🆕 ' : '   ';
+        console.log(`${marker}${file.category}: ${file.filename} (${file.sizeMB}MB, ${file.age.toFixed(1)}h)`);
+      });
+      
+      const totalSize = fileDetails.reduce((sum, file) => sum + file.sizeMB, 0);
+      console.log(`📊 Total: ${fileDetails.length} arquivos, ${totalSize.toFixed(1)}MB`);
+      console.log(`🔗 Acesse: http://localhost:3001/api/download/<filename>`);
+      console.log(`📋 === FIM DA LISTA ===\n`);
+      
+    } catch (listError) {
+      console.error('❌ Erro ao listar arquivos:', listError.message);
+    }
+    
+    // Optional: Clean up old files only after 24 hours (86400000 ms)
     setTimeout(() => {
-      // Clean up the final video file
-      fs.remove(finalVideoPath).catch(console.error);
-      console.log(`Cleaned up final video ${finalVideoFilename} after timeout`);
+      // Clean up the final video file after 24 hours
+      fs.remove(finalVideoPath).catch(() => {
+        // Ignore errors - file might have been manually deleted
+      });
+      console.log(`🗑️ Auto-cleanup: Removed ${finalVideoFilename} after 24 hours`);
       
       // Also clean up audio file if it was generated
       if (generatedAudio && generatedAudio.filename) {
         const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
-        fs.remove(audioPath).catch(console.error);
-        console.log(`Cleaned up generated audio ${generatedAudio.filename} after timeout`);
+        fs.remove(audioPath).catch(() => {
+          // Ignore errors - file might have been manually deleted
+        });
+        console.log(`🗑️ Auto-cleanup: Removed ${generatedAudio.filename} after 24 hours`);
       }
-    }, 300000); // Remove after 5 minutes
+    }, 86400000); // Remove after 24 hours instead of 5 minutes
     
   } catch (error) {
     console.error(`Combine videos job ${jobId} failed:`, error.message);
@@ -1116,7 +1237,7 @@ app.post('/api/prepare-videos', async (req, res) => {
         
       } catch (error) {
         console.error(`Failed to download video ${video.name}:`, error.message);
-        // Continue with other videos instead of failing completely
+        // Continue with other videos instead of failing completamente
       }
     }
     
@@ -1329,6 +1450,394 @@ app.post('/api/upload-to-youtube', async (req, res) => {
       error: 'YouTube upload failed',
       message: error.message,
       uploadId
+    });
+  }
+});
+
+// Helper function to add background music to video
+function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log('🎵 Adding background music to video...');
+      console.log(`Video: ${path.basename(videoPath)}`);
+      console.log(`Output: ${path.basename(outputPath)}`);
+      console.log(`Video duration: ${videoDuration}s`);
+      
+      // URL da música de fundo (comentada - não usamos arquivo externo)
+      // const backgroundMusicUrl = 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav';
+      const tempMusicPath = path.join(path.dirname(videoPath), 'temp_background_music.mp3');
+      
+      // Alternativamente, você pode usar uma música local ou gerar uma com AI
+      // Por enquanto, vamos criar um tom de fundo suave usando FFmpeg
+      console.log('🎼 Generating ambient background music...');
+      
+      // Gerar música de fundo usando FFmpeg (tom suave e ambiente)
+      await new Promise((musicResolve, musicReject) => {
+        ffmpeg()
+          .input('anullsrc=channel_layout=stereo:sample_rate=44100')
+          .inputOptions(['-f', 'lavfi'])
+          .audioFilters([
+            // Criar um tom suave de fundo
+            'sine=frequency=220:duration=' + videoDuration, // Nota Lá (220 Hz)
+            'volume=0.1', // Volume muito baixo para não interferir
+            'highpass=f=100', // Filtro passa-alta para remover frequências muito baixas
+            'lowpass=f=1000' // Filtro passa-baixa para suavizar
+          ])
+          .audioCodec('mp3')
+          .audioBitrate('128k')
+          .duration(videoDuration)
+          .output(tempMusicPath)
+          .on('start', (commandLine) => {
+            console.log('🎵 Background music generation command:', commandLine.substring(0, 100) + '...');
+          })
+          .on('end', () => {
+            console.log('✅ Background music generated successfully');
+            musicResolve();
+          })
+          .on('error', (err) => {
+            console.error('❌ Background music generation error:', err.message);
+            musicReject(err);
+          })
+          .run();
+      });
+      
+      console.log('🎬🎵 Mixing video with background music...');
+      
+      // Combinar vídeo com música de fundo
+      ffmpeg()
+        .input(videoPath) // Vídeo principal (já com narração se houver)
+        .input(tempMusicPath) // Música de fundo gerada
+        .complexFilter([
+          // Ajustar volumes: manter áudio original (narração) em volume normal,
+          // música de fundo em volume muito baixo
+          '[0:a]volume=1.0[main_audio]', // Áudio principal (narração) volume normal
+          '[1:a]volume=0.15[bg_music]', // Música de fundo volume baixo (15%)
+          '[main_audio][bg_music]amix=inputs=2:duration=shortest[mixed_audio]' // Misturar os áudios
+        ])
+        .outputOptions([
+          '-map', '0:v', // Usar vídeo da primeira entrada
+          '-map', '[mixed_audio]', // Usar áudio mixado
+          '-c:v', 'copy', // Não recodificar vídeo para economizar tempo
+          '-c:a', 'aac',
+          '-b:a', '192k'
+        ])
+        .output(outputPath)
+        .on('start', (commandLine) => {
+          console.log('🎬🎵 Video + background music command:', commandLine.substring(0, 150) + '...');
+        })
+        .on('progress', (progress) => {
+          if (progress.percent) {
+            console.log(`🎵 Background music mixing: ${Math.round(progress.percent)}%`);
+          }
+        })
+        .on('end', async () => {
+          // Limpar arquivo temporário de música
+          try {
+            await fs.remove(tempMusicPath);
+            console.log('🧹 Temporary music file cleaned up');
+          } catch (cleanupError) {
+            console.warn('⚠️ Failed to cleanup temp music file:', cleanupError.message);
+          }
+          
+          console.log('🎉 Video with background music created successfully!');
+          console.log(`🎬🎵 Final video with background music: ${path.basename(outputPath)}`);
+          resolve(outputPath);
+        })
+        .on('error', async (err) => {
+          // Limpar arquivo temporário em caso de erro
+          try {
+            await fs.remove(tempMusicPath);
+          } catch (cleanupError) {
+            console.warn('⚠️ Failed to cleanup temp music file after error:', cleanupError.message);
+          }
+          
+          console.error('❌ Background music mixing error:', err.message);
+          reject(err);
+        })
+        .run();
+        
+    } catch (error) {
+      console.error('❌ Background music setup error:', error.message);
+      reject(error);
+    }
+  });
+}
+
+// API endpoint to list all available files for download
+app.get('/api/files', async (req, res) => {
+  try {
+    console.log('📋 Listing all available files for download...');
+    
+    // Read all files in the output directory
+    const files = await fs.readdir(OUTPUT_DIR);
+    
+    const fileList = [];
+    
+    for (const filename of files) {
+      try {
+        const filePath = path.join(OUTPUT_DIR, filename);
+        const stats = await fs.stat(filePath);
+        
+        if (stats.isFile()) {
+          // Get file type and category
+          let fileType = 'unknown';
+          let category = 'other';
+          
+          if (filename.endsWith('.mp4')) {
+            fileType = 'video/mp4';
+            if (filename.includes('combined_')) {
+              category = 'concatenated';
+            } else if (filename.includes('final_with_narration_')) {
+              category = 'with_narration';
+            } else if (filename.includes('final_with_music_')) {
+              category = 'with_background_music';
+            } else {
+              category = 'video';
+            }
+          } else if (filename.endsWith('.mp3')) {
+            fileType = 'audio/mpeg';
+            category = 'audio';
+          } else if (filename.endsWith('.wav')) {
+            fileType = 'audio/wav';
+            category = 'audio';
+          }
+          
+          fileList.push({
+            filename: filename,
+            downloadUrl: `/api/download/${filename}`,
+            fileSize: stats.size,
+            fileSizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100,
+            fileType: fileType,
+            category: category,
+            createdAt: stats.birthtime,
+            modifiedAt: stats.mtime,
+            ageInHours: Math.round((Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60) * 100) / 100
+          });
+        }
+      } catch (fileError) {
+        console.warn(`⚠️ Error reading file ${filename}:`, fileError.message);
+        // Continue processing other files
+      }
+    }
+    
+    // Sort files by creation time (newest first)
+    fileList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    console.log(`📋 Found ${fileList.length} files available for download`);
+    
+    // Group files by category for better organization
+    const groupedFiles = {
+      with_background_music: fileList.filter(f => f.category === 'with_background_music'),
+      with_narration: fileList.filter(f => f.category === 'with_narration'),
+      concatenated: fileList.filter(f => f.category === 'concatenated'),
+      audio: fileList.filter(f => f.category === 'audio'),
+      video: fileList.filter(f => f.category === 'video'),
+      other: fileList.filter(f => f.category === 'other')
+    };
+    
+    const totalSizeMB = fileList.reduce((sum, file) => sum + file.fileSizeMB, 0);
+    
+    res.json({
+      success: true,
+      summary: {
+        totalFiles: fileList.length,
+        totalSizeMB: Math.round(totalSizeMB * 100) / 100,
+        categories: {
+          with_background_music: groupedFiles.with_background_music.length,
+          with_narration: groupedFiles.with_narration.length,
+          concatenated: groupedFiles.concatenated.length,
+          audio: groupedFiles.audio.length,
+          video: groupedFiles.video.length,
+          other: groupedFiles.other.length
+        }
+      },
+      files: fileList,
+      grouped: groupedFiles,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error listing files:', error.message);
+    res.status(500).json({
+      error: 'Failed to list files',
+      message: error.message
+    });
+  }
+});
+
+// API endpoint to get a quick summary of available files
+app.get('/api/files/summary', async (req, res) => {
+  try {
+    console.log('📊 Getting quick files summary...');
+    
+    // Read all files in the output directory
+    const files = await fs.readdir(OUTPUT_DIR);
+    
+    let totalFiles = 0;
+    let totalSizeMB = 0;
+    let videoCount = 0;
+    let audioCount = 0;
+    let withMusicCount = 0;
+    let newestFile = null;
+    let newestFileDate = 0;
+    
+    for (const filename of files) {
+      try {
+        const filePath = path.join(OUTPUT_DIR, filename);
+        const stats = await fs.stat(filePath);
+        
+        if (stats.isFile()) {
+          totalFiles++;
+          totalSizeMB += stats.size / (1024 * 1024);
+          
+          if (filename.endsWith('.mp4')) {
+            videoCount++;
+            if (filename.includes('final_with_music_')) {
+              withMusicCount++;
+            }
+          } else if (filename.endsWith('.mp3') || filename.endsWith('.wav')) {
+            audioCount++;
+          }
+          
+          // Track newest file
+          if (stats.birthtime.getTime() > newestFileDate) {
+            newestFileDate = stats.birthtime.getTime();
+            newestFile = {
+              filename: filename,
+              createdAt: stats.birthtime,
+              sizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100
+            };
+          }
+        }
+      } catch (fileError) {
+        // Skip files with errors
+        continue;
+      }
+    }
+    
+    console.log(`📊 Summary: ${totalFiles} files, ${Math.round(totalSizeMB)}MB total`);
+    
+    res.json({
+      success: true,
+      summary: {
+        totalFiles,
+        totalSizeMB: Math.round(totalSizeMB * 100) / 100,
+        videoCount,
+        audioCount,
+        withMusicCount,
+        newestFile,
+        lastGenerated: newestFile ? newestFile.createdAt : null
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error getting files summary:', error.message);
+    res.status(500).json({
+      error: 'Failed to get files summary',
+      message: error.message
+    });
+  }
+});
+
+// API endpoint to delete a specific file
+app.delete('/api/files/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const filePath = path.join(OUTPUT_DIR, filename);
+    
+    console.log(`🗑️ Deleting file: ${filename}`);
+    
+    if (!await fs.pathExists(filePath)) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: `Arquivo ${filename} não encontrado`
+      });
+    }
+    
+    // Get file stats before deletion
+    const stats = await fs.stat(filePath);
+    const fileSizeMB = Math.round(stats.size / (1024 * 1024) * 100) / 100;
+    
+    await fs.remove(filePath);
+    
+    console.log(`✅ File deleted successfully: ${filename} (${fileSizeMB}MB)`);
+    
+    res.json({
+      success: true,
+      message: `File ${filename} deleted successfully`,
+      deletedFile: {
+        filename: filename,
+        fileSizeMB: fileSizeMB,
+        deletedAt: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting file:', error.message);
+    res.status(500).json({
+      error: 'Failed to delete file',
+      message: error.message
+    });
+  }
+});
+
+// API endpoint to clean up old files (older than specified hours)
+app.post('/api/cleanup', async (req, res) => {
+  try {
+    const { olderThanHours = 24 } = req.body;
+    
+    console.log(`🧹 Starting cleanup of files older than ${olderThanHours} hours...`);
+    
+    const files = await fs.readdir(OUTPUT_DIR);
+    const deletedFiles = [];
+    let totalSizeDeleted = 0;
+    
+    for (const filename of files) {
+      try {
+        const filePath = path.join(OUTPUT_DIR, filename);
+        const stats = await fs.stat(filePath);
+        
+        if (stats.isFile()) {
+          const ageInHours = (Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60);
+          
+          if (ageInHours > olderThanHours) {
+            const fileSizeMB = Math.round(stats.size / (1024 * 1024) * 100) / 100;
+            await fs.remove(filePath);
+            
+            deletedFiles.push({
+              filename: filename,
+              fileSizeMB: fileSizeMB,
+              ageInHours: Math.round(ageInHours * 100) / 100
+            });
+            totalSizeDeleted += fileSizeMB;
+            
+            console.log(`🗑️ Deleted old file: ${filename} (${fileSizeMB}MB, ${Math.round(ageInHours)}h old)`);
+          }
+        }
+      } catch (fileError) {
+        console.warn(`⚠️ Error processing file ${filename}:`, fileError.message);
+      }
+    }
+    
+    console.log(`✅ Cleanup completed: ${deletedFiles.length} files deleted, ${Math.round(totalSizeDeleted * 100) / 100}MB freed`);
+    
+    res.json({
+      success: true,
+      summary: {
+        filesDeleted: deletedFiles.length,
+        totalSizeDeletedMB: Math.round(totalSizeDeleted * 100) / 100,
+        olderThanHours: olderThanHours
+      },
+      deletedFiles: deletedFiles,
+      cleanupAt: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error during cleanup:', error.message);
+    res.status(500).json({
+      error: 'Cleanup failed',
+      message: error.message
     });
   }
 });
