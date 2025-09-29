@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useGoogleDrive } from './useGoogleDrive';
 
-const numberVideos = 100;
+const numberVideos = 5;
 
 // Importa o tipo DriveVideo do hook
 interface DriveVideo {
@@ -92,8 +92,10 @@ export const useVideoPreparation = (schedules: ScheduleEntry[], openaiApiKey?: s
         ? `Baseado nos vídeos: ${videoNames.join(', ')}`
         : 'Vídeo motivacional geral';
       
-      const prompt = `Crie um roteiro motivacional e inspirador para um vídeo de redes sociais. ${videoContext}. 
-      O conteúdo deve ser positivo, engajante e adequado para um público jovem adulto interessado em desenvolvimento pessoal.`;
+      const prompt = `Crie um roteiro motivacional para um vídeo inspirador de média duração. ${videoContext}. 
+      Desenvolva uma narrativa envolvente e concisa com 4000-6000 caracteres que resulte em 6-8 minutos de áudio motivacional. 
+      O conteúdo deve ser positivo, inspirador e adequado para pessoas que buscam crescimento pessoal e desenvolvimento. 
+      Inclua histórias, exemplos práticos, reflexões e conselhos aplicáveis. Mantenha o engajamento durante toda a narração com conteúdo direto e impactante.`;
 
       const response = await fetch(`${BACKEND_URL}/generate-script`, {
         method: 'POST',
@@ -104,8 +106,8 @@ export const useVideoPreparation = (schedules: ScheduleEntry[], openaiApiKey?: s
           prompt,
           openaiApiKey,
           theme: 'motivacional',
-          duration: '60 segundos',
-          style: 'inspiracional e motivacional',
+          duration: '6-8 minutos',
+          style: 'inspiracional e envolvente',
           language: 'português brasileiro'
         }),
       });
@@ -330,6 +332,18 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
     try {
       addLog('🚀 Iniciando combinação REAL com FFmpeg no backend...');
       
+      // Debug: verificar se as chaves de API estão chegando
+      addLog(`🔑 === DEBUGGING API KEYS NO FRONTEND ===`);
+      addLog(`🔍 OpenAI API Key: ${openaiApiKey ? `✅ Exists (${openaiApiKey.length} chars)` : '❌ Missing/Undefined'}`);
+      addLog(`🔍 ElevenLabs API Key: ${elevenLabsApiKey ? `✅ Exists (${elevenLabsApiKey.length} chars)` : '❌ Missing/Undefined'}`);
+      if (openaiApiKey) {
+        addLog(`🔑 OpenAI Preview: ${openaiApiKey.substring(0, 8)}...${openaiApiKey.substring(openaiApiKey.length - 4)}`);
+      }
+      if (elevenLabsApiKey) {
+        addLog(`🔑 ElevenLabs Preview: ${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}`);
+      }
+      addLog(`🔑 === END API KEYS DEBUG ===`);
+      
       // Verificar se está autenticado
       if (!isAuthenticated) {
         throw new Error('Usuário não está autenticado no Google Drive');
@@ -460,7 +474,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
       addLog(`❌ Erro na combinação real dos arquivos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       return null;
     }
-  }, [addLog, getAccessToken, isAuthenticated]);
+  }, [addLog, getAccessToken, isAuthenticated, openaiApiKey, elevenLabsApiKey]);
 
   // Prepara vídeo para um agendamento usando FFmpeg real
   const prepareVideoForSchedule = useCallback(async (schedule: ScheduleEntry) => {
@@ -480,9 +494,11 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
           addLog('🤖 Gerando script motivacional antes do processamento de vídeo...');
           addLog(`🔑 OpenAI API Key disponível: ${openaiApiKey.substring(0, 8)}...`);
           
-          const prompt = `Crie um roteiro motivacional inspirador para um vídeo de desenvolvimento pessoal. 
+          const prompt = `Crie um roteiro motivacional para um vídeo inspirador de desenvolvimento pessoal. 
           O vídeo será usado em um agendamento de postagem automática para redes sociais. 
-          Crie algo que motive, inspire e engaje o público jovem adulto interessado em crescimento pessoal e produtividade.
+          Desenvolva uma narrativa envolvente e concisa com 4000-6000 caracteres que resulte em 6-8 minutos de áudio motivacional.
+          Crie algo que motive, inspire e engaje o público interessado em crescimento pessoal e produtividade.
+          Inclua histórias, exemplos práticos, reflexões e conselhos aplicáveis de forma direta e impactante.
           
           Agendamento: ${schedule.frequency} às ${schedule.time}
           Data próxima execução: ${new Date(schedule.nextRun).toLocaleDateString('pt-BR')}`;
@@ -498,8 +514,8 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
               prompt,
               openaiApiKey,
               theme: 'motivacional',
-              duration: '60 segundos',
-              style: 'inspiracional e motivacional',
+              duration: '6-8 minutos',
+              style: 'inspiracional e envolvente',
               language: 'português brasileiro'
             }),
           });
@@ -723,7 +739,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
     } finally {
       setIsPreparingVideo(false);
     }
-  }, [isAuthenticated, selectRandomVideos, combineVideosWithFFmpeg, addLog, generateScriptForVideo, generateYouTubeMetadata, uploadToYouTube, youtubeApiKey]);
+  }, [isAuthenticated, selectRandomVideos, combineVideosWithFFmpeg, addLog, generateScriptForVideo, generateYouTubeMetadata, uploadToYouTube, youtubeApiKey, openaiApiKey, elevenLabsApiKey]);
 
   // Verifica se precisa preparar vídeos (1 hora antes)
   useEffect(() => {

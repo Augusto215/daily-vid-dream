@@ -140,45 +140,63 @@ async function generateVideoScript(prompt, options = {}, apiKey) {
     });
 
     const {
-      theme = 'motivacional para idosos',
-      duration = '20 minutos',
+      theme = 'motivacional',
+      duration = '6-8 minutos',
       style = 'explicativo',
       language = 'português brasileiro'
     } = options;
 
-    const systemPrompt = `Você é um especialista em criação de roteiros para áudio/narração de vídeos informativos grandes para idosos. 
+    // Determinar o tamanho do roteiro baseado na duração
+    const isDurationLong = duration.includes('15') || duration.includes('20') || duration.includes('longo');
+    const targetLength = isDurationLong ? '12000-18000' : '4000-6000';
+    const targetMinutes = isDurationLong ? '15-20' : '6-8';
+
+    const systemPrompt = `Você é um especialista em criação de roteiros para áudio/narração de vídeos motivacionais e informativos. 
 Crie textos que sejam:
-- GRANDES E EXPLICATIVOS, de 16000 a 20000 caracteres
+- ${isDurationLong ? 'MUITO LONGOS E DETALHADOS' : 'CONCISOS E IMPACTANTES'}, com ${targetLength} caracteres para gerar ${targetMinutes} minutos de áudio
 - Fluidos e naturais para leitura em voz alta
-- Emocionalmente envolventes e motivacionais
-- Adequados para redes sociais
+- Emocionalmente envolventes, motivacionais e inspiradores
+- Ricos em exemplos, histórias e metáforas
+- ${isDurationLong ? 'Com desenvolvimento profundo do tema' : 'Com conteúdo direto e focado'}
+- Adequados para pessoas que buscam crescimento pessoal
 - Com linguagem ${style}
 - Em ${language}
-- Com duração aproximada de ${duration}
+- Com duração aproximada de ${duration} quando convertido em áudio
 - SEM títulos, subtítulos ou formatação markdown
-- APENAS texto corrido para ser lido como narração`;
+- APENAS texto corrido contínuo para ser lido como narração
+- Com transições suaves entre ideias
+- Incluindo reflexões, conselhos práticos e motivação`;
 
-    const userPrompt = `Crie um texto motivacional explicativo para narração de vídeo com tema: ${theme}
+    const userPrompt = `Crie um roteiro ${isDurationLong ? 'extenso' : 'conciso'} e motivacional para narração de vídeo com tema: ${theme}
     
 Baseado no seguinte contexto ou ideia: ${prompt}
 
-IMPORTANTE: 
-- MÁXIMO 2000-4000 CARACTERES (texto longo)
+REQUISITOS OBRIGATÓRIOS:
+- ${isDurationLong ? 'MÍNIMO 12000-18000' : 'ENTRE 4000-6000'} CARACTERES para gerar ${targetMinutes} minutos de áudio
+- ${isDurationLong ? 'Desenvolva o tema de forma profunda e abrangente' : 'Desenvolva o tema de forma focada e impactante'}
+- Inclua histórias inspiradoras, exemplos práticos e reflexões
+- Use linguagem envolvente ${isDurationLong ? 'que mantenha a atenção por muito tempo' : 'e direta que prenda a atenção'}
+- Crie um fluxo narrativo que evolui naturalmente
+- ${isDurationLong ? 'Adicione elementos de suspense e descoberta' : 'Seja direto mas envolvente'}
+- Inclua conselhos práticos aplicáveis
+- Use metáforas e analogias para ilustrar conceitos
+- Mantenha tom motivacional e esperançoso do início ao fim
 - Gere APENAS o texto corrido, sem títulos, sem formatação, sem estruturas markdown
-- O texto deve fluir naturalmente para ser lido em voz alta
-- Seja explicativo, impactante e motivacional
-- Foque no essencial da mensagem
-- O texto será convertido em áudio, então priorize fluidez na leitura
-- Não use asteriscos, hashtags, números ou qualquer formatação especial`;
+- O texto deve fluir perfeitamente para leitura em voz alta
+- Priorize fluidez, ritmo e engajamento para áudio ${isDurationLong ? 'longo' : 'de média duração'}
+- Não use asteriscos, hashtags, números ou qualquer formatação especial
+- Crie pausas naturais através de pontuação adequada`;
 
     console.log('Generating video script with OpenAI...');
+    console.log(`Target length: ${targetLength} characters for ${targetMinutes} minutes`);
+    
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      max_tokens: 6500, // Reduced to generate shorter scripts
+      max_tokens: isDurationLong ? 15000 : 8000, // Adjusted tokens based on duration
       temperature: 0.8,
     });
 
@@ -259,9 +277,16 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
       throw new Error('Text is required for audio generation');
     }
 
+    // Verificação de tamanho do texto
+    if (text.length > 15000) {
+      console.log(`⚠️ Text is very large (${text.length} chars). This may take longer to process.`);
+      console.log(`💡 Consider breaking into smaller chunks for faster processing.`);
+    }
+
     console.log('🎤 Generating audio with ElevenLabs...');
     console.log(`Text preview: "${text.substring(0, 100)}..."`);
     console.log(`Text length: ${text.length} characters`);
+    console.log(`⏱️ Calculated timeout: ${getTimeoutForTextLength(text.length)/1000}s`);
     console.log(`Output path: ${outputPath}`);
     console.log(`API Key length: ${elevenLabsApiKey.length} characters`);
     console.log(`API Key preview: ${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}`);
@@ -274,9 +299,9 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
     }
 
     // Usar axios para fazer a requisição diretamente (mais confiável)
-    const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel - voz feminina
-    // Outras opções de vozes em português:
-    // const voiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - voz masculina
+    const voiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - voz masculina em português
+    // Outras opções de vozes:
+    // const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel - voz feminina
     // const voiceId = 'ErXwobaYiN019PkySvjV'; // Antoni - voz masculina
     
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
@@ -293,11 +318,16 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
     };
 
     // Função de retry para tornar mais robusto
-    const makeRequestWithRetry = async (maxRetries = 3) => {
+    const maxRetries = text.length > 5000 ? 5 : 3; // Mais tentativas para textos longos
+    console.log(`🔄 Maximum retry attempts: ${maxRetries} (based on text length: ${text.length})`);
+    
+    const makeRequestWithRetry = async () => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           console.log(`Making request to ElevenLabs API (attempt ${attempt}/${maxRetries})...`);
           console.log(`Using voice ID: ${voiceId}`);
+          console.log(`Request timeout: ${getTimeoutForTextLength(text.length)/1000}s`);
+          console.log(`Text size: ${text.length} characters (${Math.round(text.length/1000)}k chars)`);
 
           const response = await axios({
             method: 'POST',
@@ -310,7 +340,7 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
             },
             data: requestBody,
             responseType: 'arraybuffer', // Importante para receber dados binários
-            timeout: 60000, // 60 segundos para textos maiores
+            timeout: getTimeoutForTextLength(text.length), // Timeout dinâmico baseado no tamanho do texto
             maxRedirects: 5,
             validateStatus: function (status) {
               return status < 400; // Aceita apenas status de sucesso
@@ -319,15 +349,22 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
 
           return response;
         } catch (error) {
-          console.log(`❌ Attempt ${attempt} failed:`, error.code || error.message);
+          const errorInfo = {
+            code: error.code,
+            message: error.message,
+            status: error.response?.status,
+            timeout: getTimeoutForTextLength(text.length)/1000 + 's'
+          };
+          console.log(`❌ Attempt ${attempt} failed:`, errorInfo);
           
           if (attempt === maxRetries) {
             throw error; // Re-throw no último attempt
           }
           
-          // Aguardar antes de tentar novamente (backoff exponencial)
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10s
-          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          // Aguardar antes de tentar novamente (backoff exponencial mais agressivo para textos longos)
+          const baseDelay = text.length > 5000 ? 2000 : 1000; // Delay maior para textos longos
+          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 15000); // Max 15s
+          console.log(`⏳ Waiting ${delay}ms before retry... (longer delay for large text)`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -335,7 +372,9 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
 
     const response = await makeRequestWithRetry();
 
-    console.log('Audio response received, saving file...');
+    console.log('✅ Audio response received successfully!');
+    console.log(`📦 Response size: ${Math.round(response.data.byteLength / 1024)}KB`);
+    console.log('💾 Saving audio file...');
 
     // Converter para Buffer e salvar
     const audioBuffer = Buffer.from(response.data);
@@ -447,42 +486,45 @@ function combineVideoWithAudio(videoPath, audioPath, outputPath) {
       console.log(`Original video duration: ${videoDuration}s`);
       console.log(`New audio duration: ${audioDuration}s`);
       
-      // Calculate speed adjustment needed to match audio duration
-      const speedFactor = videoDuration / audioDuration;
-      console.log(`Video speed adjustment factor: ${speedFactor.toFixed(3)}`);
-      
       let ffmpegCommand = ffmpeg()
         .input(videoPath)  // Video input (will remove original audio)
         .input(audioPath); // New audio input
       
-      if (Math.abs(speedFactor - 1.0) > 0.05) { // Only adjust if difference is > 5%
-        console.log(`🎬 Adjusting video speed by factor ${speedFactor.toFixed(3)} to match new audio duration`);
-        console.log(`📹 Video will be sped up/slowed down to sync with audio narration`);
+      if (videoDuration < audioDuration) {
+        // Video é mais curto que o áudio - fazer loop do vídeo
+        const loopCount = Math.ceil(audioDuration / videoDuration);
+        console.log(`🔄 Video is shorter than audio - will loop video ${loopCount} times`);
+        console.log(`📹 Video will maintain normal speed and loop to match audio duration`);
         
-        // Adjust video speed to match audio duration and replace audio
+        // Use filter to loop video
         ffmpegCommand = ffmpegCommand
-          .videoFilter(`setpts=${(1/speedFactor).toFixed(3)}*PTS`) // Adjust video speed
+          .complexFilter([
+            `[0:v]loop=loop=${loopCount - 1}:size=${Math.floor(videoDuration * 30)}[looped_video]` // Loop video (assuming 30 fps)
+          ])
           .outputOptions([
-            '-c:v', 'libx264',      // Re-encode video with speed adjustment
-            '-c:a', 'aac',          // Encode new audio
-            '-map', '0:v:0',        // Map video from first input (original video)
-            '-map', '1:a:0',        // Map audio from second input (generated audio)
-            '-shortest',            // End when the shortest input ends
+            '-map', '[looped_video]',   // Use looped video
+            '-map', '1:a:0',            // Map audio from second input (generated audio)
+            '-c:v', 'libx264',          // Re-encode video for looping
+            '-c:a', 'aac',              // Encode new audio
             '-preset', 'fast',
-            '-crf', '23'
+            '-crf', '23',
+            '-t', audioDuration.toString(), // Limit to audio duration
+            '-shortest'                 // End when the shortest input ends
           ]);
       } else {
-        console.log('🎬 Video and audio durations are similar, no speed adjustment needed');
-        console.log('🔄 Simply replacing original audio with generated audio');
+        // Video é mais longo ou igual ao áudio - cortar na duração do áudio
+        console.log(`✂️ Video is longer than or equal to audio - will trim video to match audio duration`);
+        console.log(`� Video will maintain normal speed and be cut at audio end`);
         
-        // Just replace audio without speed adjustment
+        // Simply replace audio and cut video at audio duration
         ffmpegCommand = ffmpegCommand
           .outputOptions([
-            '-c:v', 'copy',         // Copy video stream without re-encoding
-            '-c:a', 'aac',          // Encode new audio
-            '-map', '0:v:0',        // Map video from first input (no audio)
-            '-map', '1:a:0',        // Map audio from second input (generated audio)
-            '-shortest'             // End when the shortest input ends
+            '-map', '0:v:0',            // Map video from first input
+            '-map', '1:a:0',            // Map audio from second input (generated audio)
+            '-c:v', 'copy',             // Copy video stream without re-encoding (faster)
+            '-c:a', 'aac',              // Encode new audio
+            '-t', audioDuration.toString(), // Limit to audio duration
+            '-shortest'                 // End when the shortest input ends
           ]);
       }
       
@@ -502,6 +544,7 @@ function combineVideoWithAudio(videoPath, audioPath, outputPath) {
           console.log(`⏱️ Final video duration: ${audioDuration}s (matched to audio)`);
           console.log(`🔇 Original video audio has been removed`);
           console.log(`🎵 New generated audio has been added`);
+          console.log(`📹 Video maintained normal speed - no acceleration/deceleration`);
           resolve(outputPath);
         })
         .on('error', (err) => {
@@ -876,6 +919,23 @@ app.post('/api/combine-videos', async (req, res) => {
     let generatedAudio = null;
     const { openaiApiKey, elevenLabsApiKey } = req.body;
     
+    // Debug: Log API key availability and detailed info
+    console.log(`🔑 === API KEYS DEBUGGING ===`);
+    console.log(`📦 Request body keys:`, Object.keys(req.body));
+    console.log(`🔍 OpenAI API Key:`, {
+      exists: !!openaiApiKey,
+      type: typeof openaiApiKey,
+      length: openaiApiKey ? openaiApiKey.length : 0,
+      preview: openaiApiKey ? `${openaiApiKey.substring(0, 8)}...${openaiApiKey.substring(openaiApiKey.length - 4)}` : 'NOT_PROVIDED'
+    });
+    console.log(`🔍 ElevenLabs API Key:`, {
+      exists: !!elevenLabsApiKey,
+      type: typeof elevenLabsApiKey,
+      length: elevenLabsApiKey ? elevenLabsApiKey.length : 0,
+      preview: elevenLabsApiKey ? `${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}` : 'NOT_PROVIDED'
+    });
+    console.log(`🔑 === END API KEYS DEBUGGING ===\n`);
+    
     if (openaiApiKey) {
       try {
         console.log(`\n=== GENERATING SCRIPT FOR COMBINED VIDEO (BEFORE PROCESSING) ===`);
@@ -885,15 +945,17 @@ app.post('/api/combine-videos', async (req, res) => {
         const videoContext = downloadedFiles.map(f => f.originalName).join(', ');
         const durationText = totalDuration > 60 ? `${Math.round(totalDuration/60)} minutos` : `${Math.round(totalDuration)} segundos`;
         
-        // Modified prompt to generate shorter scripts for ElevenLabs quota
-        const prompt = `Crie um roteiro longo para um vídeo motivacional com os seguintes vídeos: ${videoContext}. 
+        // Modified prompt to generate medium-length scripts for 6-8 minute audio
+        const prompt = `Crie um roteiro motivacional para um vídeo inspirador com os seguintes vídeos: ${videoContext}. 
         O vídeo tem duração de ${durationText}. 
-        Crie uma mensagem motivacional impactante e direta em no máximo 4000 caracteres.`;
+        Desenvolva uma narrativa motivacional envolvente e concisa com 4000-6000 caracteres que, quando convertida em áudio, resulte em 6-8 minutos de narração inspiradora. 
+        Inclua histórias, exemplos práticos, reflexões e conselhos aplicáveis de forma direta e impactante. 
+        Mantenha o engajamento durante toda a narração com linguagem fluida e natural.`;
         
         const scriptResult = await generateVideoScript(prompt, {
           theme: 'motivacional',
-          duration: '30 segundos', // Force shorter duration for smaller text
-          style: 'direto e impactante',
+          duration: '6-8 minutos', // Updated duration for medium content
+          style: 'inspiracional e envolvente',
           language: 'português brasileiro'
         }, openaiApiKey);
         
@@ -945,7 +1007,14 @@ app.post('/api/combine-videos', async (req, res) => {
             
           } catch (audioError) {
             console.error(`❌ Erro ao gerar áudio:`, audioError.message);
+            console.error(`🔍 Detalhes do erro:`, {
+              errorType: audioError.constructor.name,
+              apiKeyProvided: !!elevenLabsApiKey,
+              scriptLength: scriptResult.script?.length || 0,
+              stack: audioError.stack?.split('\n').slice(0, 3).join('\n')
+            });
             console.log(`⚠️ Script foi gerado com sucesso, mas áudio não foi gerado`);
+            console.log(`💡 Possíveis causas: Chave ElevenLabs inválida, quota excedida, ou texto muito longo`);
           }
         } else if (!elevenLabsApiKey) {
           console.log(`⚠️ ElevenLabs API key não fornecida - áudio não será gerado`);
@@ -1524,7 +1593,7 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
         audioFilters = [
           `[1:a]aloop=loop=${loopCount - 1}:size=${Math.floor(musicDuration * 44100)}[bg_music_loop]`,
           '[0:a]volume=1.0[main_audio]',
-          '[bg_music_loop]volume=0.02[bg_music]',
+          '[bg_music_loop]volume=0.06[bg_music]',
           '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]'
         ];
       } else {
@@ -1858,3 +1927,24 @@ app.post('/api/cleanup', async (req, res) => {
     });
   }
 });
+
+// Helper function to calculate timeout based on text length
+function getTimeoutForTextLength(textLength) {
+  // Base timeout: 30 segundos
+  let timeout = 30000;
+  
+  if (textLength <= 1000) {
+    timeout = 30000; // 30 segundos para textos curtos
+  } else if (textLength <= 3000) {
+    timeout = 60000; // 1 minuto para textos médios
+  } else if (textLength <= 6000) {
+    timeout = 120000; // 2 minutos para textos grandes
+  } else if (textLength <= 10000) {
+    timeout = 180000; // 3 minutos para textos muito grandes
+  } else {
+    timeout = 300000; // 5 minutos para textos extremamente grandes
+  }
+  
+  console.log(`⏱️ Timeout calculado para ${textLength} caracteres: ${timeout/1000}s`);
+  return timeout;
+}

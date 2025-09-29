@@ -138,7 +138,11 @@ export const useScriptGenerator = () => {
     '60 segundos',
     '90 segundos',
     '2 minutos',
-    '3 minutos'
+    '3 minutos',
+    '5 minutos',
+    '10 minutos',
+    '15 minutos',
+    '20 minutos'
   ];
 
   const styleOptions = [
