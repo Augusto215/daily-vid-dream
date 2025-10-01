@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3001;
 // OpenAI client will be initialized per request with the API key from frontend
 
 // Middleware
-app.use(cors());    
+app.use(cors());
 app.use(express.json());
 
 // Diretórios temporários
@@ -34,61 +34,62 @@ async function downloadVideoFromGoogleDrive(videoId, accessToken, filePath) {
   try {
     console.log(`[${videoId}] Starting download...`);
     console.log(`[${videoId}] Saving to: ${filePath}`);
-    
+
     const response = await axios({
       method: 'GET',
       url: `https://www.googleapis.com/drive/v3/files/${videoId}?alt=media`,
       headers: {
-        'Authorization': `Bearer ${accessToken}`
+        Authorization: `Bearer ${accessToken}`,
       },
       responseType: 'stream',
-      timeout: 60000 // 60 second timeout for initial connection
+      timeout: 60000, // 60 second timeout for initial connection
     });
 
     console.log(`[${videoId}] Response received, starting file write...`);
-    
+
     const writer = fs.createWriteStream(filePath);
     let downloadedBytes = 0;
-    
+
     // Track download progress
     let lastLoggedMB = 0;
     response.data.on('data', (chunk) => {
       downloadedBytes += chunk.length;
       const currentMB = Math.round(downloadedBytes / (1024 * 1024));
-      if (currentMB > lastLoggedMB && currentMB % 10 === 0) { // Log every 10MB
+      if (currentMB > lastLoggedMB && currentMB % 10 === 0) {
+        // Log every 10MB
         console.log(`[${videoId}] Downloaded: ${currentMB}MB`);
         lastLoggedMB = currentMB;
       }
     });
-    
+
     response.data.pipe(writer);
-    
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         writer.destroy();
         reject(new Error(`Download timeout for video ${videoId}`));
       }, 300000); // 5 minute total timeout for large videos
-      
+
       writer.on('finish', () => {
         clearTimeout(timeout);
         const sizeInMB = Math.round(downloadedBytes / (1024 * 1024));
         console.log(`[${videoId}] Download completed successfully - ${sizeInMB}MB`);
         resolve(filePath);
       });
-      
+
       writer.on('error', (err) => {
         clearTimeout(timeout);
         console.error(`[${videoId}] Write error:`, err.message);
         reject(err);
       });
-      
+
       response.data.on('error', (err) => {
         clearTimeout(timeout);
         writer.destroy();
         console.error(`[${videoId}] Stream error:`, err.message);
         reject(err);
       });
-      
+
       response.data.on('end', () => {
         console.log(`[${videoId}] Stream ended, waiting for file write to finish...`);
       });
@@ -136,14 +137,14 @@ async function generateVideoScript(prompt, options = {}, apiKey) {
 
     // Initialize OpenAI client with the provided API key
     const openai = new OpenAI({
-      apiKey: apiKey
+      apiKey: apiKey,
     });
 
     const {
       theme = 'motivacional',
       duration = '6-8 minutos',
       style = 'explicativo',
-      language = 'português brasileiro'
+      language = 'português brasileiro',
     } = options;
 
     // Determinar o tamanho do roteiro baseado na duração
@@ -189,12 +190,12 @@ REQUISITOS OBRIGATÓRIOS:
 
     console.log('Generating video script with OpenAI...');
     console.log(`Target length: ${targetLength} characters for ${targetMinutes} minutes`);
-    
+
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: 'gpt-4o-mini',
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
       ],
       max_tokens: isDurationLong ? 15000 : 8000, // Adjusted tokens based on duration
       temperature: 0.8,
@@ -202,16 +203,15 @@ REQUISITOS OBRIGATÓRIOS:
 
     const script = completion.choices[0].message.content;
     console.log('Video script generated successfully');
-    
+
     return {
       script,
       theme,
       duration,
       style,
       language,
-      tokensUsed: completion.usage?.total_tokens || 0
+      tokensUsed: completion.usage?.total_tokens || 0,
     };
-
   } catch (error) {
     console.error('Error generating video script:', error.message);
     throw new Error(`Failed to generate script: ${error.message}`);
@@ -222,21 +222,21 @@ REQUISITOS OBRIGATÓRIOS:
 async function testElevenLabsApiKey(apiKey) {
   try {
     console.log('🔑 Testing ElevenLabs API key connectivity...');
-    
+
     const response = await axios({
       method: 'GET',
       url: 'https://api.elevenlabs.io/v1/user',
       headers: {
         'xi-api-key': apiKey,
-        'User-Agent': 'DailyVidDream/1.0'
+        'User-Agent': 'DailyVidDream/1.0',
       },
       timeout: 30000, // Aumentado para 30 segundos
       maxRedirects: 5,
       validateStatus: function (status) {
         return status < 500; // Resolve para qualquer status abaixo de 500
-      }
+      },
     });
-    
+
     if (response.status === 200) {
       console.log('✅ ElevenLabs API key is valid');
       console.log('User info:', response.data);
@@ -249,7 +249,7 @@ async function testElevenLabsApiKey(apiKey) {
     console.error('❌ ElevenLabs API key test failed:');
     console.error('Error code:', error.code);
     console.error('Error message:', error.message);
-    
+
     if (error.code === 'ECONNABORTED') {
       console.error('Connection timeout - check your internet connection');
       return { valid: false, error: 'Connection timeout - check your internet connection and try again' };
@@ -286,10 +286,12 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
     console.log('🎤 Generating audio with ElevenLabs...');
     console.log(`Text preview: "${text.substring(0, 100)}..."`);
     console.log(`Text length: ${text.length} characters`);
-    console.log(`⏱️ Calculated timeout: ${getTimeoutForTextLength(text.length)/1000}s`);
+    console.log(`⏱️ Calculated timeout: ${getTimeoutForTextLength(text.length) / 1000}s`);
     console.log(`Output path: ${outputPath}`);
     console.log(`API Key length: ${elevenLabsApiKey.length} characters`);
-    console.log(`API Key preview: ${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}`);
+    console.log(
+      `API Key preview: ${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}`
+    );
 
     // Test API key validity first
     console.log('Testing ElevenLabs API key...');
@@ -303,7 +305,7 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
     // Outras opções de vozes:
     // const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel - voz feminina
     // const voiceId = 'ErXwobaYiN019PkySvjV'; // Antoni - voz masculina
-    
+
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
     const requestBody = {
@@ -313,30 +315,30 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
         stability: 0.75,
         similarity_boost: 0.8,
         style: 0.5,
-        use_speaker_boost: true
-      }
+        use_speaker_boost: true,
+      },
     };
 
     // Função de retry para tornar mais robusto
     const maxRetries = text.length > 5000 ? 5 : 3; // Mais tentativas para textos longos
     console.log(`🔄 Maximum retry attempts: ${maxRetries} (based on text length: ${text.length})`);
-    
+
     const makeRequestWithRetry = async () => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           console.log(`Making request to ElevenLabs API (attempt ${attempt}/${maxRetries})...`);
           console.log(`Using voice ID: ${voiceId}`);
-          console.log(`Request timeout: ${getTimeoutForTextLength(text.length)/1000}s`);
-          console.log(`Text size: ${text.length} characters (${Math.round(text.length/1000)}k chars)`);
+          console.log(`Request timeout: ${getTimeoutForTextLength(text.length) / 1000}s`);
+          console.log(`Text size: ${text.length} characters (${Math.round(text.length / 1000)}k chars)`);
 
           const response = await axios({
             method: 'POST',
             url: url,
             headers: {
-              'Accept': 'audio/mpeg',
+              Accept: 'audio/mpeg',
               'Content-Type': 'application/json',
               'xi-api-key': elevenLabsApiKey,
-              'User-Agent': 'DailyVidDream/1.0'
+              'User-Agent': 'DailyVidDream/1.0',
             },
             data: requestBody,
             responseType: 'arraybuffer', // Importante para receber dados binários
@@ -344,7 +346,7 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
             maxRedirects: 5,
             validateStatus: function (status) {
               return status < 400; // Aceita apenas status de sucesso
-            }
+            },
           });
 
           return response;
@@ -353,19 +355,19 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
             code: error.code,
             message: error.message,
             status: error.response?.status,
-            timeout: getTimeoutForTextLength(text.length)/1000 + 's'
+            timeout: getTimeoutForTextLength(text.length) / 1000 + 's',
           };
           console.log(`❌ Attempt ${attempt} failed:`, errorInfo);
-          
+
           if (attempt === maxRetries) {
             throw error; // Re-throw no último attempt
           }
-          
+
           // Aguardar antes de tentar novamente (backoff exponencial mais agressivo para textos longos)
           const baseDelay = text.length > 5000 ? 2000 : 1000; // Delay maior para textos longos
           const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 15000); // Max 15s
           console.log(`⏳ Waiting ${delay}ms before retry... (longer delay for large text)`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     };
@@ -389,24 +391,24 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
       success: true,
       filePath: outputPath,
       fileSize: stats.size,
-      voiceId: voiceId
+      voiceId: voiceId,
     };
-
   } catch (error) {
     console.error('❌ Error generating audio:', error.message);
-    
+
     // Log detalhado do erro para debug
     if (error.response) {
       console.error('ElevenLabs API Status:', error.response.status);
       console.error('ElevenLabs API Headers:', error.response.headers);
-      
+
       // Converter buffer para string para ver a mensagem real
       let errorMessage = 'Unknown error';
       try {
         if (Buffer.isBuffer(error.response.data)) {
           const errorData = JSON.parse(error.response.data.toString());
           console.error('ElevenLabs API Error Details:', errorData);
-          errorMessage = errorData.detail?.message || errorData.message || errorData.detail?.status || 'API Error';
+          errorMessage =
+            errorData.detail?.message || errorData.message || errorData.detail?.status || 'API Error';
         } else {
           console.error('ElevenLabs API Data:', error.response.data);
           errorMessage = error.response.data.detail?.message || error.response.data.message || 'API Error';
@@ -415,9 +417,11 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
         console.error('Failed to parse error response:', parseError.message);
         console.error('Raw error data:', error.response.data);
       }
-      
+
       if (error.response.status === 401) {
-        throw new Error(`ElevenLabs API authentication failed: ${errorMessage}. Please check your API key.`);
+        throw new Error(
+          `ElevenLabs API authentication failed: ${errorMessage}. Please check your API key.`
+        );
       } else if (error.response.status === 429) {
         throw new Error(`ElevenLabs API rate limit exceeded: ${errorMessage}`);
       } else if (error.response.status === 422) {
@@ -426,7 +430,7 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
         throw new Error(`ElevenLabs API error (${error.response.status}): ${errorMessage}`);
       }
     }
-    
+
     throw new Error(`Failed to generate audio: ${error.message}`);
   }
 }
@@ -435,7 +439,7 @@ async function generateAudioFromText(text, outputPath, elevenLabsApiKey) {
 function normalizeVideo(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     console.log(`Normalizing video: ${path.basename(inputPath)}`);
-    
+
     ffmpeg(inputPath)
       .videoCodec('libx264')
       .audioCodec('aac')
@@ -443,12 +447,7 @@ function normalizeVideo(inputPath, outputPath) {
       .fps(30) // Standardize frame rate
       .audioBitrate('128k')
       .videoBitrate('2000k')
-      .outputOptions([
-        '-preset', 'fast',
-        '-pix_fmt', 'yuv420p', // Ensure compatible pixel format
-        '-r', '30', // Force frame rate
-        '-ar', '44100' // Standardize audio sample rate
-      ])
+      .outputOptions(['-preset', 'fast', '-pix_fmt', 'yuv420p', '-r', '30', '-ar', '44100'])
       .output(outputPath)
       .on('start', (commandLine) => {
         console.log(`Normalize command: ${commandLine}`);
@@ -478,84 +477,424 @@ function combineVideoWithAudio(videoPath, audioPath, outputPath) {
       console.log(`Video: ${path.basename(videoPath)}`);
       console.log(`New Audio: ${path.basename(audioPath)}`);
       console.log(`Output: ${path.basename(outputPath)}`);
-      
+
       // Get durations
       const videoDuration = await getVideoDuration(videoPath);
       const audioDuration = await getAudioDuration(audioPath);
-      
+
       console.log(`Original video duration: ${videoDuration}s`);
       console.log(`New audio duration: ${audioDuration}s`);
-      
-      let ffmpegCommand = ffmpeg()
-        .input(videoPath)  // Video input (will remove original audio)
-        .input(audioPath); // New audio input
-      
+
+      let ffmpegCommand = ffmpeg().input(videoPath).input(audioPath);
+
       if (videoDuration < audioDuration) {
         // Video é mais curto que o áudio - fazer loop do vídeo
         const loopCount = Math.ceil(audioDuration / videoDuration);
         console.log(`🔄 Video is shorter than audio - will loop video ${loopCount} times`);
         console.log(`📹 Video will maintain normal speed and loop to match audio duration`);
-        
-        // Use filter to loop video
+
         ffmpegCommand = ffmpegCommand
           .complexFilter([
-            `[0:v]loop=loop=${loopCount - 1}:size=${Math.floor(videoDuration * 30)}[looped_video]` // Loop video (assuming 30 fps)
+            `[0:v]loop=loop=${loopCount - 1}:size=${Math.floor(videoDuration * 30)}[looped_video]`,
           ])
           .outputOptions([
-            '-map', '[looped_video]',   // Use looped video
-            '-map', '1:a:0',            // Map audio from second input (generated audio)
-            '-c:v', 'libx264',          // Re-encode video for looping
-            '-c:a', 'aac',              // Encode new audio
-            '-preset', 'fast',
-            '-crf', '23',
-            '-t', audioDuration.toString(), // Limit to audio duration
-            '-shortest'                 // End when the shortest input ends
+            '-map',
+            '[looped_video]',
+            '-map',
+            '1:a:0',
+            '-c:v',
+            'libx264',
+            '-c:a',
+            'aac',
+            '-preset',
+            'fast',
+            '-crf',
+            '23',
+            '-t',
+            audioDuration.toString(),
+            '-shortest',
           ]);
       } else {
         // Video é mais longo ou igual ao áudio - cortar na duração do áudio
         console.log(`✂️ Video is longer than or equal to audio - will trim video to match audio duration`);
-        console.log(`� Video will maintain normal speed and be cut at audio end`);
-        
-        // Simply replace audio and cut video at audio duration
-        ffmpegCommand = ffmpegCommand
-          .outputOptions([
-            '-map', '0:v:0',            // Map video from first input
-            '-map', '1:a:0',            // Map audio from second input (generated audio)
-            '-c:v', 'copy',             // Copy video stream without re-encoding (faster)
-            '-c:a', 'aac',              // Encode new audio
-            '-t', audioDuration.toString(), // Limit to audio duration
-            '-shortest'                 // End when the shortest input ends
-          ]);
+        console.log(`🎬 Video will maintain normal speed and be cut at audio end`);
+
+        ffmpegCommand = ffmpegCommand.outputOptions([
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-t',
+          audioDuration.toString(),
+          '-shortest',
+        ]);
       }
-      
+
       ffmpegCommand
         .output(outputPath)
         .on('start', (commandLine) => {
-          console.log('FFmpeg video+audio command:', commandLine);
+          console.log('🎥 FFmpeg command: ' + commandLine);
         })
         .on('progress', (progress) => {
-          if (progress.percent) {
-            console.log(`Combining video+audio: ${Math.round(progress.percent)}% done`);
-          }
+          console.log(`⏳ Processing: ${Math.round(progress.percent || 0)}%`);
         })
         .on('end', () => {
-          console.log('✅ Video audio replacement completed successfully');
-          console.log(`🎬🎤 Final video now has generated audio narration`);
-          console.log(`⏱️ Final video duration: ${audioDuration}s (matched to audio)`);
-          console.log(`🔇 Original video audio has been removed`);
-          console.log(`🎵 New generated audio has been added`);
-          console.log(`📹 Video maintained normal speed - no acceleration/deceleration`);
-          resolve(outputPath);
+          console.log('✅ Video audio replacement completed successfully!');
+          resolve();
         })
         .on('error', (err) => {
-          console.error('❌ FFmpeg video audio replacement error:', err.message);
+          console.error('❌ Error during video audio replacement:', err.message);
           reject(err);
         })
         .run();
+    } catch (err) {
+      console.error('❌ Error in combineVideoWithAudio:', err.message);
+      reject(err);
+    }
+  });
+}
+
+// --- SUBTÍTULOS: helpers de cues, VTT e SRT -------------------------------
+
+function hhmmssms(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+  return {
+    vtt: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(
+      3,
+      '0'
+    )}`,
+    srt: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(
+      3,
+      '0'
+    )}`,
+  };
+}
+
+function buildCues(scriptText, totalSeconds) {
+  // ====== PARÂMETROS AJUSTADOS PARA LEGENDAS MAIS LENTAS ======
+  const WORDS_PER_SECOND = 2.0;     // Velocidade mais lenta (120 palavras/min)
+  const MAX_WORDS_PER_CUE = 8;      // Menos palavras por legenda
+  const MIN_WORDS_PER_CUE = 2;      // Mínimo de palavras por legenda
+  const MAX_LINE_CHARS = 32;        // Largura máxima por linha
+  const MIN_DUR = 1.5;               // Duração mínima aumentada (segundos)
+  const MAX_DUR = 5.0;               // Duração máxima aumentada (segundos)
+  const GAP = 0.1;                   // Gap maior entre legendas
+  const READING_COMFORT = 1.3;      // Fator de conforto para leitura (30% mais tempo)
+  // ===========================================================
+
+  // Limpa o texto
+  const clean = (scriptText || '')
+    .replace(/\r/g, ' ')
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!clean) throw new Error('Empty script');
+
+  // Quebra o texto em sentenças naturais
+  const sentences = clean
+    .split(/(?<=[.!?…])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // Processa cada sentença em fragmentos menores
+  const fragments = [];
+  
+  for (const sentence of sentences) {
+    const words = sentence.split(/\s+/).filter(Boolean);
+    
+    if (words.length <= MAX_WORDS_PER_CUE) {
+      // Sentença curta - mantém inteira
+      fragments.push(sentence);
+    } else {
+      // Sentença longa - quebra em partes menores respeitando pontuação
+      let currentFragment = [];
+      
+      for (let i = 0; i < words.length; i++) {
+        currentFragment.push(words[i]);
         
-    } catch (error) {
-      console.error('❌ Video audio replacement setup error:', error.message);
-      reject(error);
+        // Verifica se deve quebrar aqui
+        const shouldBreak = 
+          currentFragment.length >= MAX_WORDS_PER_CUE ||
+          (currentFragment.length >= MIN_WORDS_PER_CUE && (
+            words[i].endsWith(',') ||
+            words[i].endsWith(';') ||
+            words[i].endsWith(':') ||
+            (i < words.length - 1 && (
+              words[i + 1].toLowerCase() === 'e' ||
+              words[i + 1].toLowerCase() === 'ou' ||
+              words[i + 1].toLowerCase() === 'mas' ||
+              words[i + 1].toLowerCase() === 'que' ||
+              words[i + 1].toLowerCase() === 'para'
+            ))
+          ));
+        
+        if (shouldBreak || i === words.length - 1) {
+          fragments.push(currentFragment.join(' '));
+          currentFragment = [];
+        }
+      }
+    }
+  }
+
+  // Calcula o tempo necessário baseado na velocidade de fala
+  const totalWords = fragments.reduce((sum, f) => sum + f.split(/\s+/).length, 0);
+  const estimatedDuration = totalWords / WORDS_PER_SECOND;
+  
+  // Ajusta a velocidade se necessário para caber no tempo do áudio
+  const speedAdjustment = totalSeconds / estimatedDuration;
+  const adjustedWordsPerSecond = WORDS_PER_SECOND * speedAdjustment;
+
+  // Função para quebrar texto em linhas
+  const wrapLines = (text, maxChars = MAX_LINE_CHARS) => {
+    if (text.length <= maxChars) return [text];
+    
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    for (const word of words) {
+      const testLine = currentLine ? currentLine + ' ' + word : word;
+      
+      if (testLine.length > maxChars && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    
+    if (currentLine) lines.push(currentLine);
+    
+    // Limita a 2 linhas para melhor legibilidade
+    if (lines.length > 2) {
+      const mid = Math.ceil(lines.length / 2);
+      return [
+        lines.slice(0, mid).join(' '),
+        lines.slice(mid).join(' ')
+      ];
+    }
+    
+    return lines;
+  };
+
+  // Cria os cues com timing proporcional
+  const cues = [];
+  let currentTime = 0;
+
+  for (let i = 0; i < fragments.length; i++) {
+    const fragment = fragments[i];
+    const wordCount = fragment.split(/\s+/).length;
+    
+    // Calcula duração baseada no número de palavras com fator de conforto
+    let duration = (wordCount / adjustedWordsPerSecond) * READING_COMFORT;
+    
+    // Adiciona tempo extra para frases com pontuação forte
+    if (fragment.endsWith('.') || fragment.endsWith('!') || fragment.endsWith('?')) {
+      duration += 0.3; // Pausa adicional no fim das frases
+    }
+    
+    // Aplica limites de duração
+    duration = Math.max(MIN_DUR, Math.min(MAX_DUR, duration));
+    
+    // Ajusta para não ultrapassar o tempo total
+    if (currentTime + duration > totalSeconds) {
+      duration = totalSeconds - currentTime;
+    }
+    
+    const startTime = currentTime;
+    const endTime = Math.min(totalSeconds, startTime + duration);
+    
+    // Adiciona o cue
+    cues.push({
+      index: i + 1,
+      start: startTime,
+      end: endTime,
+      text: wrapLines(fragment).join('\n')
+    });
+    
+    // Avança o tempo com pequeno gap
+    currentTime = endTime + (i < fragments.length - 1 ? GAP : 0);
+    
+    // Para se já chegamos no tempo total
+    if (currentTime >= totalSeconds - 0.1) break;
+  }
+  
+  // Garante que o último cue termina exatamente no final do áudio
+  if (cues.length > 0) {
+    cues[cues.length - 1].end = totalSeconds;
+  }
+  
+  return cues;
+}
+
+async function generateVTTFromScript(scriptText, audioDurationSeconds, outPath) {
+  const cues = buildCues(scriptText, audioDurationSeconds);
+  let vtt = 'WEBVTT\n\n';
+  for (const c of cues) {
+    const st = hhmmssms(c.start).vtt;
+    const et = hhmmssms(c.end).vtt;
+    vtt += `${st} --> ${et}\n${c.text}\n\n`;
+  }
+  await fs.writeFile(outPath, vtt, 'utf8');
+  return outPath;
+}
+
+async function generateSRTFromScript(scriptText, audioDurationSeconds, outPath) {
+  const cues = buildCues(scriptText, audioDurationSeconds);
+  let srt = '';
+  for (const c of cues) {
+    const st = hhmmssms(c.start).srt;
+    const et = hhmmssms(c.end).srt;
+    srt += `${c.index}\n${st} --> ${et}\n${c.text}\n\n`;
+  }
+  await fs.writeFile(outPath, srt, 'utf8');
+  return outPath;
+}
+
+// Helper function to combine video with audio and BURNED subtitles (from SRT)
+function combineVideoWithAudioAndSubtitles(videoPath, audioPath, outputPath, scriptText) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log('🎬🎤📝 Starting video processing with audio and BURNED subtitles (SRT)...');
+
+      const videoDuration = await getVideoDuration(videoPath);
+      const audioDuration = await getAudioDuration(audioPath);
+      const tempDir = path.dirname(outputPath);
+      const base = path.basename(outputPath, path.extname(outputPath));
+      const srtPath = path.join(tempDir, `${base}_subtitles.srt`);
+
+      await generateSRTFromScript(scriptText, audioDuration, srtPath);
+
+      let cmd = ffmpeg().input(videoPath).input(audioPath);
+
+      if (videoDuration < audioDuration) {
+        const loopCount = Math.ceil(audioDuration / videoDuration);
+        cmd = cmd
+          .complexFilter([
+            `[0:v]loop=loop=${loopCount - 1}:size=${Math.floor(videoDuration * 30)}[loopv]`,
+            `[loopv]subtitles='${srtPath.replace(/\\/g, '/')}':force_style='Fontsize=12,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,Alignment=2,BackColour=&HC0000000'[subv]`,
+          ])
+          .outputOptions([
+            '-map',
+            '[subv]',
+            '-map',
+            '1:a:0',
+            '-c:v',
+            'libx264',
+            '-c:a',
+            'aac',
+            '-preset',
+            'fast',
+            '-crf',
+            '23',
+            '-t',
+            audioDuration.toString(),
+            '-shortest',
+          ]);
+      } else {
+        cmd = cmd
+          .complexFilter([
+            `[0:v]subtitles='${srtPath.replace(/\\/g, '/')}':force_style='Fontsize=12,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,Alignment=2,BackColour=&HC0000000'[subv]`,
+          ])
+          .outputOptions([
+            '-map',
+            '[subv]',
+            '-map',
+            '1:a:0',
+            '-c:v',
+            'libx264',
+            '-c:a',
+            'aac',
+            '-preset',
+            'fast',
+            '-crf',
+            '23',
+            '-t',
+            audioDuration.toString(),
+            '-shortest',
+          ]);
+      }
+
+      cmd
+        .output(outputPath)
+        .on('start', (cl) => console.log('🎥 FFmpeg (burn SRT) cmd:', cl))
+        .on('progress', (p) => console.log(`⏳ Burn subtitles: ${Math.round(p.percent || 0)}%`))
+        .on('end', async () => {
+          console.log('✅ Burned subtitles completed!');
+          try {
+            await fs.remove(srtPath);
+          } catch {}
+          resolve();
+        })
+        .on('error', async (err) => {
+          console.error('❌ Error burning subtitles:', err.message);
+          try {
+            await fs.remove(srtPath);
+          } catch {}
+          reject(err);
+        })
+        .run();
+    } catch (err) {
+      console.error('❌ Error in combineVideoWithAudioAndSubtitles:', err.message);
+      reject(err);
+    }
+  });
+}
+
+// (opcional) Queima subtítulo em vídeo já com áudio correto, sem reintroduzir áudio
+function burnSubtitlesOnVideo(videoPath, outputPath, scriptText, totalDurationSeconds) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const tempDir = path.dirname(outputPath);
+      const base = path.basename(outputPath, path.extname(outputPath));
+      const srtPath = path.join(tempDir, `${base}_subtitles.srt`);
+
+      await generateSRTFromScript(scriptText, totalDurationSeconds, srtPath);
+
+      ffmpeg()
+        .input(videoPath)
+        .videoFilter(
+          `subtitles='${srtPath.replace(/\\/g, '/')}':force_style='Fontsize=12,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,Alignment=2,BackColour=&HC0000000'`
+        )
+        .outputOptions([
+          '-c:v',
+          'libx264',
+          '-preset',
+          'fast',
+          '-crf',
+          '23',
+          '-c:a',
+          'copy', // mantém o áudio já correto
+        ])
+        .output(outputPath)
+        .on('start', (cl) => console.log('🎥 FFmpeg (burn SRT only) cmd:', cl))
+        .on('progress', (p) => console.log(`⏳ Burn-only: ${Math.round(p.percent || 0)}%`))
+        .on('end', async () => {
+          console.log('✅ Burn-only completed!');
+          try {
+            await fs.remove(srtPath);
+          } catch {}
+          resolve();
+        })
+        .on('error', async (err) => {
+          console.error('❌ Error burn-only:', err.message);
+          try {
+            await fs.remove(srtPath);
+          } catch {}
+          reject(err);
+        })
+        .run();
+    } catch (err) {
+      console.error('❌ Error in burnSubtitlesOnVideo:', err.message);
+      reject(err);
     }
   });
 }
@@ -567,15 +906,15 @@ function concatenateVideos(inputFiles, outputPath) {
       console.log(`Starting video concatenation...`);
       console.log(`Input files: ${inputFiles.join(', ')}`);
       console.log(`Output path: ${outputPath}`);
-      
+
       // Create normalized versions of all input files
       const normalizedFiles = [];
       const tempDir = path.dirname(inputFiles[0]);
-      
+
       for (let i = 0; i < inputFiles.length; i++) {
         const inputFile = inputFiles[i];
         const normalizedFile = path.join(tempDir, `normalized_${i + 1}.mp4`);
-        
+
         try {
           await normalizeVideo(inputFile, normalizedFile);
           normalizedFiles.push(normalizedFile);
@@ -592,21 +931,19 @@ function concatenateVideos(inputFiles, outputPath) {
           throw error;
         }
       }
-      
+
       console.log(`All videos normalized, starting concatenation...`);
-      
+
       // Create file list for concat demuxer (more reliable than filter_complex)
       const fileListPath = path.join(tempDir, 'filelist.txt');
-      const fileListContent = normalizedFiles.map(file => `file '${file}'`).join('\n');
+      const fileListContent = normalizedFiles.map((file) => `file '${file}'`).join('\n');
       await fs.writeFile(fileListPath, fileListContent);
-      
+
       // Use concat demuxer instead of filter_complex
       ffmpeg()
         .input(fileListPath)
         .inputOptions(['-f', 'concat', '-safe', '0'])
-        .outputOptions([
-          '-c', 'copy' // Copy streams without re-encoding since they're already normalized
-        ])
+        .outputOptions(['-c', 'copy']) // Copy streams without re-encoding since they're already normalized
         .output(outputPath)
         .on('start', (commandLine) => {
           console.log('FFmpeg concat command:', commandLine);
@@ -618,7 +955,7 @@ function concatenateVideos(inputFiles, outputPath) {
         })
         .on('end', async () => {
           console.log('Video concatenation completed successfully');
-          
+
           // Clean up normalized files and file list
           try {
             for (const file of normalizedFiles) {
@@ -629,12 +966,12 @@ function concatenateVideos(inputFiles, outputPath) {
           } catch (cleanupError) {
             console.error('Cleanup error:', cleanupError.message);
           }
-          
+
           resolve(outputPath);
         })
         .on('error', async (err) => {
           console.error('FFmpeg concatenation error:', err.message);
-          
+
           // Clean up on error
           try {
             for (const file of normalizedFiles) {
@@ -644,11 +981,10 @@ function concatenateVideos(inputFiles, outputPath) {
           } catch (cleanupError) {
             console.error('Cleanup error:', cleanupError.message);
           }
-          
+
           reject(err);
         })
         .run();
-        
     } catch (error) {
       console.error('Concatenation setup error:', error.message);
       reject(error);
@@ -665,16 +1001,12 @@ async function uploadVideoToYouTube(videoPath, metadata, credentials) {
     console.log(`Description length: ${metadata.description?.length || 0} characters`);
 
     // Initialize Google Auth
-    const auth = new google.auth.OAuth2(
-      credentials.clientId,
-      credentials.clientSecret,
-      credentials.redirectUri
-    );
+    const auth = new google.auth.OAuth2(credentials.clientId, credentials.clientSecret, credentials.redirectUri);
 
     // Set credentials (access token and refresh token)
     auth.setCredentials({
       access_token: credentials.accessToken,
-      refresh_token: credentials.refreshToken
+      refresh_token: credentials.refreshToken,
     });
 
     // Initialize YouTube API
@@ -683,7 +1015,7 @@ async function uploadVideoToYouTube(videoPath, metadata, credentials) {
     // Get video file stats
     const stats = await fs.stat(videoPath);
     const fileSizeMB = Math.round(stats.size / (1024 * 1024));
-    
+
     console.log(`📁 Video file size: ${fileSizeMB}MB`);
 
     // Upload metadata
@@ -694,12 +1026,12 @@ async function uploadVideoToYouTube(videoPath, metadata, credentials) {
         tags: metadata.tags || [],
         categoryId: metadata.categoryId || '22', // People & Blogs
         defaultLanguage: 'pt-BR',
-        defaultAudioLanguage: 'pt-BR'
+        defaultAudioLanguage: 'pt-BR',
       },
       status: {
         privacyStatus: metadata.privacyStatus || 'private', // private, unlisted, public
-        selfDeclaredMadeForKids: false
-      }
+        selfDeclaredMadeForKids: false,
+      },
     };
 
     console.log('🚀 Starting upload to YouTube...');
@@ -709,8 +1041,8 @@ async function uploadVideoToYouTube(videoPath, metadata, credentials) {
       part: ['snippet', 'status'],
       requestBody: uploadMetadata,
       media: {
-        body: fs.createReadStream(videoPath)
-      }
+        body: fs.createReadStream(videoPath),
+      },
     });
 
     const videoId = response.data.id;
@@ -727,12 +1059,11 @@ async function uploadVideoToYouTube(videoPath, metadata, credentials) {
       videoUrl: videoUrl,
       title: response.data.snippet.title,
       privacyStatus: response.data.status.privacyStatus,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
     };
-
   } catch (error) {
     console.error('❌ YouTube upload failed:', error.message);
-    
+
     // Log detailed error information
     if (error.response) {
       console.error('YouTube API Status:', error.response.status);
@@ -747,75 +1078,74 @@ async function uploadVideoToYouTube(videoPath, metadata, credentials) {
 app.post('/api/generate-script', async (req, res) => {
   const requestId = uuidv4();
   console.log(`Starting script generation: ${requestId}`);
-  
+
   try {
-    const { 
-      prompt, 
+    const {
+      prompt,
       openaiApiKey,
       elevenLabsApiKey,
       theme = 'informativo',
       duration = '10 minutos',
       style = 'casual e engajante',
-      language = 'português brasileiro'
+      language = 'português brasileiro',
     } = req.body;
-    
+
     if (!prompt || prompt.trim().length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Prompt is required',
-        message: 'Você precisa fornecer uma ideia ou contexto para o roteiro'
+        message: 'Você precisa fornecer uma ideia ou contexto para o roteiro',
       });
     }
 
     if (!openaiApiKey) {
       return res.status(400).json({
         error: 'OpenAI API key is required',
-        message: 'Chave da API do OpenAI é obrigatória'
+        message: 'Chave da API do OpenAI é obrigatória',
       });
     }
-    
+
     console.log(`Generating script with prompt: "${prompt.substring(0, 100)}..."`);
     console.log(`Options: theme=${theme}, duration=${duration}, style=${style}`);
-    
-    const result = await generateVideoScript(prompt, {
-      theme,
-      duration,
-      style,
-      language
-    }, openaiApiKey);
-    
+
+    const result = await generateVideoScript(
+      prompt,
+      {
+        theme,
+        duration,
+        style,
+        language,
+      },
+      openaiApiKey
+    );
+
     console.log(`Script generation completed: ${requestId}`);
     console.log(`Tokens used: ${result.tokensUsed}`);
-    
+
     // Generate audio if ElevenLabs API key is provided
     let audioResult = null;
     if (elevenLabsApiKey && result.script) {
       try {
         console.log(`Generating audio for script: ${requestId}`);
-        
+
         const audioFilename = `script_audio_${requestId}.mp3`;
         const audioPath = path.join(OUTPUT_DIR, audioFilename);
-        
-        const audioGenResult = await generateAudioFromText(
-          result.script, 
-          audioPath, 
-          elevenLabsApiKey
-        );
-        
+
+        const audioGenResult = await generateAudioFromText(result.script, audioPath, elevenLabsApiKey);
+
         audioResult = {
           filename: audioFilename,
           downloadUrl: `/api/download/${audioFilename}`,
           fileSize: audioGenResult.fileSize,
-          voiceId: audioGenResult.voiceId
+          voiceId: audioGenResult.voiceId,
         };
-        
+
         console.log(`Audio generation completed: ${requestId}`);
-        
       } catch (audioError) {
         console.error(`Audio generation failed for ${requestId}:`, audioError.message);
         // Continue without audio if it fails
       }
     }
-    
+
     res.json({
       success: true,
       requestId,
@@ -824,23 +1154,22 @@ app.post('/api/generate-script', async (req, res) => {
         theme: result.theme,
         duration: result.duration,
         style: result.style,
-        language: result.language
+        language: result.language,
       },
       metadata: {
         tokensUsed: result.tokensUsed,
         generatedAt: new Date().toISOString(),
-        estimatedCost: Math.round(result.tokensUsed * 0.002 * 100) / 100 // Rough estimate for GPT-3.5
+        estimatedCost: Math.round(result.tokensUsed * 0.002 * 100) / 100, // Rough estimate
       },
-      generatedAudio: audioResult
+      generatedAudio: audioResult,
     });
-    
   } catch (error) {
     console.error(`Script generation failed: ${requestId}`, error.message);
-    
+
     res.status(500).json({
       error: 'Script generation failed',
       message: error.message,
-      requestId
+      requestId,
     });
   }
 });
@@ -849,76 +1178,78 @@ app.post('/api/generate-script', async (req, res) => {
 app.post('/api/combine-videos', async (req, res) => {
   const jobId = uuidv4();
   console.log(`Starting video combination job: ${jobId}`);
-  
+
+  // Torna acessíveis no catch (bugfix de escopo)
+  let generatedAudio = null;
+
   try {
-    const { videos, accessToken, scheduleId } = req.body;
-    
+    const { videos, accessToken, scheduleId, enableSubtitles = true } = req.body;
+
+    // novo: modo de subtítulo
+    const { openaiApiKey, elevenLabsApiKey, subtitleMode } = req.body;
+    // subtitleMode: 'vtt' (default), 'burn', 'none'
+    const mode = subtitleMode === 'burn' || subtitleMode === 'none' ? subtitleMode : 'vtt';
+
     if (!videos || !Array.isArray(videos) || videos.length === 0) {
       return res.status(400).json({ error: 'No videos provided' });
     }
-    
+
     if (!accessToken) {
       return res.status(400).json({ error: 'Access token required' });
     }
-    
+
     console.log(`Processing ${videos.length} videos for schedule ${scheduleId}`);
-    
+
     // Create job-specific temp directory
     const jobTempDir = path.join(TEMP_DIR, jobId);
     fs.ensureDirSync(jobTempDir);
-    
+
     const downloadedFiles = [];
-    
+
     // Download all videos
     for (let i = 0; i < videos.length; i++) {
       const video = videos[i];
       const filename = `video_${i + 1}_${video.id}.mp4`;
       const fullFilePath = path.join(jobTempDir, filename);
-      
+
       try {
         console.log(`Starting download ${i + 1}/${videos.length}: ${video.name}`);
-        const filePath = await downloadVideoFromGoogleDrive(
-          video.id, 
-          accessToken, 
-          fullFilePath
-        );
-        
+        const filePath = await downloadVideoFromGoogleDrive(video.id, accessToken, fullFilePath);
+
         // Verify the downloaded file exists and has content
         const stats = await fs.stat(filePath);
         if (stats.size === 0) {
           throw new Error(`Downloaded file is empty: ${filename}`);
         }
-        
+
         // Check video duration
         const duration = await getVideoDuration(filePath);
         console.log(`Video ${filename} duration: ${duration} seconds`);
-        
+
         downloadedFiles.push({
           path: filePath,
           originalName: video.name,
-          duration: duration
+          duration: duration,
         });
-        
       } catch (error) {
         console.error(`Failed to download video ${video.name}:`, error.message);
         // Continue with other videos instead of failing completamente
       }
     }
-    
+
     if (downloadedFiles.length === 0) {
       throw new Error('No videos were successfully downloaded');
     }
-    
+
     console.log(`Successfully downloaded ${downloadedFiles.length} videos`);
-    
+
     // Calculate total duration for script context
     const totalDuration = downloadedFiles.reduce((sum, file) => sum + file.duration, 0);
-    
+
     // Generate script and audio FIRST (before video concatenation) if API keys are provided
     let generatedScript = null;
-    let generatedAudio = null;
-    const { openaiApiKey, elevenLabsApiKey } = req.body;
-    
+    let scriptResult = null;
+
     // Debug: Log API key availability and detailed info
     console.log(`🔑 === API KEYS DEBUGGING ===`);
     console.log(`📦 Request body keys:`, Object.keys(req.body));
@@ -926,100 +1257,87 @@ app.post('/api/combine-videos', async (req, res) => {
       exists: !!openaiApiKey,
       type: typeof openaiApiKey,
       length: openaiApiKey ? openaiApiKey.length : 0,
-      preview: openaiApiKey ? `${openaiApiKey.substring(0, 8)}...${openaiApiKey.substring(openaiApiKey.length - 4)}` : 'NOT_PROVIDED'
+      preview: openaiApiKey ? `${openaiApiKey.substring(0, 8)}...${openaiApiKey.substring(openaiApiKey.length - 4)}` : 'NOT_PROVIDED',
     });
     console.log(`🔍 ElevenLabs API Key:`, {
       exists: !!elevenLabsApiKey,
       type: typeof elevenLabsApiKey,
       length: elevenLabsApiKey ? elevenLabsApiKey.length : 0,
-      preview: elevenLabsApiKey ? `${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}` : 'NOT_PROVIDED'
+      preview: elevenLabsApiKey
+        ? `${elevenLabsApiKey.substring(0, 8)}...${elevenLabsApiKey.substring(elevenLabsApiKey.length - 4)}`
+        : 'NOT_PROVIDED',
     });
     console.log(`🔑 === END API KEYS DEBUGGING ===\n`);
-    
+
     if (openaiApiKey) {
       try {
         console.log(`\n=== GENERATING SCRIPT FOR COMBINED VIDEO (BEFORE PROCESSING) ===`);
-        console.log(`Videos to be used: ${downloadedFiles.map(f => f.originalName).join(', ')}`);
-        
-        // Create a context-aware prompt based on video names and duration
-        const videoContext = downloadedFiles.map(f => f.originalName).join(', ');
-        const durationText = totalDuration > 60 ? `${Math.round(totalDuration/60)} minutos` : `${Math.round(totalDuration)} segundos`;
-        
-        // Modified prompt to generate medium-length scripts for 6-8 minute audio
+        console.log(`Videos to be used: ${downloadedFiles.map((f) => f.originalName).join(', ')}`);
+
+        const videoContext = downloadedFiles.map((f) => f.originalName).join(', ');
+        const durationText = totalDuration > 60 ? `${Math.round(totalDuration / 60)} minutos` : `${Math.round(totalDuration)} segundos`;
+
         const prompt = `Crie um roteiro motivacional para um vídeo inspirador com os seguintes vídeos: ${videoContext}. 
         O vídeo tem duração de ${durationText}. 
         Desenvolva uma narrativa motivacional envolvente e concisa com 4000-6000 caracteres que, quando convertida em áudio, resulte em 6-8 minutos de narração inspiradora. 
         Inclua histórias, exemplos práticos, reflexões e conselhos aplicáveis de forma direta e impactante. 
         Mantenha o engajamento durante toda a narração com linguagem fluida e natural.`;
-        
-        const scriptResult = await generateVideoScript(prompt, {
-          theme: 'motivacional',
-          duration: '6-8 minutos', // Updated duration for medium content
-          style: 'inspiracional e envolvente',
-          language: 'português brasileiro'
-        }, openaiApiKey);
-        
+
+        scriptResult = await generateVideoScript(
+          prompt,
+          {
+            theme: 'motivacional',
+            duration: '6-8 minutos',
+            style: 'inspiracional e envolvente',
+            language: 'português brasileiro',
+          },
+          openaiApiKey
+        );
+
         generatedScript = {
           script: scriptResult.script,
           theme: scriptResult.theme,
           tokensUsed: scriptResult.tokensUsed,
-          generatedAt: new Date().toISOString()
+          generatedAt: new Date().toISOString(),
         };
-        
+
         console.log(`\n📝 === SCRIPT GERADO AUTOMATICAMENTE ===`);
         console.log(`🎬 Vídeos base: ${videoContext}`);
         console.log(`⏱️ Duração: ${durationText}`);
         console.log(`🤖 Tokens utilizados: ${scriptResult.tokensUsed}`);
         console.log(`📄 Caracteres do script: ${scriptResult.script.length}`);
-        console.log(`\n📋 ROTEIRO COMPLETO:`);
-        console.log(`${'='.repeat(60)}`);
-        console.log(scriptResult.script);
-        console.log(`${'='.repeat(60)}`);
-        console.log(`📝 === FIM DO SCRIPT ===\n`);
-        
+        console.log(`\n📋 ROTEIRO COMPLETO:\n${'='.repeat(60)}\n${scriptResult.script}\n${'='.repeat(60)}\n📝 === FIM DO SCRIPT ===\n`);
+
         // Generate audio from the script if ElevenLabs API key is provided
         if (elevenLabsApiKey && scriptResult.script) {
           try {
             console.log(`\n🎤 === GENERATING AUDIO FROM SCRIPT (BEFORE VIDEO PROCESSING) ===`);
-            
+
             const audioFilename = `audio_${jobId}.mp3`;
             const audioPath = path.join(OUTPUT_DIR, audioFilename);
-            
-            const audioResult = await generateAudioFromText(
-              scriptResult.script, 
-              audioPath, 
-              elevenLabsApiKey
-            );
-            
+
+            const audioResult = await generateAudioFromText(scriptResult.script, audioPath, elevenLabsApiKey);
+
             generatedAudio = {
               filename: audioFilename,
               downloadUrl: `/api/download/${audioFilename}`,
               fileSize: audioResult.fileSize,
               voiceId: audioResult.voiceId,
-              generatedAt: new Date().toISOString()
+              generatedAt: new Date().toISOString(),
             };
-            
+
             console.log(`🎵 Audio gerado com sucesso ANTES do processamento de vídeo!`);
             console.log(`📁 Arquivo: ${audioFilename}`);
             console.log(`💾 Tamanho: ${Math.round(audioResult.fileSize / 1024)}KB`);
             console.log(`🎤 Voz utilizada: ${audioResult.voiceId}`);
             console.log(`🎤 === FIM DA GERAÇÃO DE ÁUDIO ===\n`);
-            
           } catch (audioError) {
             console.error(`❌ Erro ao gerar áudio:`, audioError.message);
-            console.error(`🔍 Detalhes do erro:`, {
-              errorType: audioError.constructor.name,
-              apiKeyProvided: !!elevenLabsApiKey,
-              scriptLength: scriptResult.script?.length || 0,
-              stack: audioError.stack?.split('\n').slice(0, 3).join('\n')
-            });
             console.log(`⚠️ Script foi gerado com sucesso, mas áudio não foi gerado`);
-            console.log(`💡 Possíveis causas: Chave ElevenLabs inválida, quota excedida, ou texto muito longo`);
           }
         } else if (!elevenLabsApiKey) {
           console.log(`⚠️ ElevenLabs API key não fornecida - áudio não será gerado`);
         }
-        
       } catch (scriptError) {
         console.error(`❌ Erro ao gerar script automaticamente:`, scriptError.message);
         console.log(`⚠️ Continuando com processamento de vídeo mesmo sem script`);
@@ -1027,63 +1345,71 @@ app.post('/api/combine-videos', async (req, res) => {
     } else {
       console.log(`⚠️ OpenAI API key não fornecida - script não será gerado automaticamente`);
     }
-    
+
     // Now proceed with video concatenation
     console.log(`\n🎬 === STARTING VIDEO CONCATENATION ===`);
-    
-    // Prepare output filename
+
     const outputFilename = `combined_${jobId}.mp4`;
     const outputPath = path.join(OUTPUT_DIR, outputFilename);
-    
-    // Concatenate videos using FFmpeg
+
     await concatenateVideos(
-      downloadedFiles.map(f => f.path),
+      downloadedFiles.map((f) => f.path),
       outputPath
     );
-    
+
     console.log(`✅ Video concatenation completed successfully!`);
     console.log(`📁 Concatenated video saved at: ${outputPath}`);
-    
-    // If audio was generated, combine it with the video
+
+    // Determine the final path
     let finalVideoPath = outputPath;
     let finalVideoFilename = outputFilename;
-    
+
+    // If audio was generated, combine it with the video (and handle subtitles according to mode)
     if (generatedAudio && generatedAudio.filename) {
       try {
-        console.log(`\n🎬🎤 === REPLACING VIDEO AUDIO WITH GENERATED NARRATION ===`);
-        
         const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
-        const combinedFilename = `final_with_narration_${jobId}.mp4`;
-        const combinedPath = path.join(OUTPUT_DIR, combinedFilename);
-        
-        // Replace video audio with generated narration (video duration will match audio duration)
-        await combineVideoWithAudio(outputPath, audioPath, combinedPath);
-        
-        // Update the final paths to the version with narration
-        finalVideoPath = combinedPath;
-        finalVideoFilename = combinedFilename;
-        
-        // Remove the original video file to save space
-        await fs.remove(outputPath);
-        
-        // Clean up temporary audio file immediately after use
+
+        if (enableSubtitles && (scriptResult || generatedScript) && mode === 'burn') {
+          console.log(`\n🎬🎤📝 === REPLACING AUDIO AND BURNING SUBTITLES ===`);
+          const burnedFilename = `final_burned_sub_${jobId}.mp4`;
+          const burnedPath = path.join(OUTPUT_DIR, burnedFilename);
+
+          await combineVideoWithAudioAndSubtitles(outputPath, audioPath, burnedPath, (scriptResult || generatedScript).script);
+
+          // Update final file to burned one
+          finalVideoPath = burnedPath;
+          finalVideoFilename = burnedFilename;
+
+          // Remove intermediate (no need to keep original concatenated)
+          await fs.remove(outputPath);
+        } else {
+          console.log(`\n🎬🎤 === REPLACING AUDIO (no burn) ===`);
+          const audioOnlyFilename = `final_with_narration_${jobId}.mp4`;
+          const audioOnlyPath = path.join(OUTPUT_DIR, audioOnlyFilename);
+          await combineVideoWithAudio(outputPath, audioPath, audioOnlyPath);
+
+          // Update final
+          finalVideoPath = audioOnlyPath;
+          finalVideoFilename = audioOnlyFilename;
+
+          // Remove original concatenated file
+          await fs.remove(outputPath);
+
+          // (Opcional) se quiser queimar depois sem mexer no áudio, poderíamos usar burnSubtitlesOnVideo
+          // mas aqui deixamos só VTT quando mode !== 'burn'
+        }
+
+        // Clean up temporary audio file
         try {
           await fs.remove(audioPath);
           console.log(`🗑️ Temporary audio file cleaned up: ${generatedAudio.filename}`);
         } catch (cleanupError) {
           console.error(`⚠️ Failed to clean up temporary audio file:`, cleanupError.message);
         }
-        
-        console.log(`🎉 Final video with narration created: ${combinedFilename}`);
-        console.log(`🔇 Original video audio removed`);
-        console.log(`🎤 Generated narration audio added`);
-        console.log(`🎬🎤 === AUDIO REPLACEMENT COMPLETED ===\n`);
-        
       } catch (combineError) {
-        console.error(`❌ Erro ao substituir áudio do vídeo:`, combineError.message);
-        console.log(`⚠️ Mantendo vídeo original com áudio original`);
-        
-        // Clean up temporary audio file even if combination failed
+        console.error(`❌ Erro ao substituir/queimar legendas:`, combineError.message);
+        console.log(`⚠️ Mantendo vídeo concatenado original`);
+        // tenta limpar áudio temporário
         try {
           const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
           await fs.remove(audioPath);
@@ -1091,82 +1417,88 @@ app.post('/api/combine-videos', async (req, res) => {
         } catch (cleanupError) {
           console.error(`⚠️ Failed to clean up temporary audio file after error:`, cleanupError.message);
         }
-        
-        // Keep the original video if audio replacement fails
       }
     } else {
-      console.log(`\n⚠️ === SKIPPING AUDIO REPLACEMENT ===`);
-      if (!generatedAudio) {
-        console.log(`📢 No audio was generated (ElevenLabs failed or not configured)`);
-      } else if (!generatedAudio.filename) {
-        console.log(`📢 Generated audio has no filename`);
-      }
-      
-      // Clean up temporary audio file even if not used
-      if (generatedAudio && generatedAudio.filename) {
-        try {
-          const audioPath = path.join(OUTPUT_DIR, generatedAudio.filename);
-          await fs.remove(audioPath);
-          console.log(`🗑️ Temporary audio file cleaned up (unused): ${generatedAudio.filename}`);
-        } catch (cleanupError) {
-          console.error(`⚠️ Failed to clean up unused temporary audio file:`, cleanupError.message);
-        }
-      }
-      
-      console.log(`🎬 Proceeding with original video: ${finalVideoFilename}`);
-      console.log(`⚠️ === AUDIO REPLACEMENT SKIPPED ===\n`);
+      console.log(`\n⚠️ === SKIPPING AUDIO REPLACEMENT (no audio) ===`);
     }
-    
+
+    // Generate VTT when requested (enableSubtitles) and we do have a script
+    let vttInfo = null;
+    if (enableSubtitles && (scriptResult || generatedScript)) {
+      try {
+        const vttFilename = `subs_${jobId}.vtt`;
+        const vttPath = path.join(OUTPUT_DIR, vttFilename);
+
+        // preferir duração do áudio caso exista, senão do vídeo final
+        let durationForSubs = null;
+        if (generatedAudio && generatedAudio.filename) {
+          // já removemos o mp3; usamos duração do vídeo final
+          durationForSubs = await getVideoDuration(finalVideoPath);
+        } else {
+          durationForSubs = await getVideoDuration(finalVideoPath);
+        }
+
+        await generateVTTFromScript((scriptResult || generatedScript).script, durationForSubs, vttPath);
+
+        vttInfo = {
+          filename: vttFilename,
+          url: `/api/subtitles/${vttFilename}`,
+        };
+        console.log(`✅ VTT gerado: ${vttFilename}`);
+      } catch (vttErr) {
+        console.error('❌ Falha ao gerar VTT:', vttErr.message);
+      }
+    } else if (enableSubtitles) {
+      console.log('⚠️ Subtitles enabled, but no script available.');
+    }
+
     // Add background music to the final video (regardless of whether it has narration or not)
     let hasBackgroundMusic = false;
     try {
       console.log(`\n🎵 === ADDING BACKGROUND MUSIC ===`);
       console.log(`🎬 Current video file: ${finalVideoFilename}`);
       console.log(`📁 Current video path: ${finalVideoPath}`);
-      
+
       const musicFilename = `final_with_music_${jobId}.mp4`;
       const musicPath = path.join(OUTPUT_DIR, musicFilename);
-      
+
       console.log(`🎵 Target music video file: ${musicFilename}`);
       console.log(`📁 Target music video path: ${musicPath}`);
-      
+
       // Get video duration for background music
       console.log(`⏱️ Getting video duration for background music...`);
       const videoDuration = await getVideoDuration(finalVideoPath);
       console.log(`⏱️ Video duration: ${videoDuration}s`);
-      
+
       // Add background music
       console.log(`🎼 Starting background music generation and mixing...`);
       await addBackgroundMusicToVideo(finalVideoPath, musicPath, videoDuration);
-      
+
       // Remove the version without background music
       await fs.remove(finalVideoPath);
-      
+
       // Update final paths to version with background music
       finalVideoPath = musicPath;
       finalVideoFilename = musicFilename;
-      
+
       hasBackgroundMusic = true;
       console.log(`🎵 Background music added successfully: ${musicFilename}`);
       console.log(`🎬🎵 === FINAL VIDEO WITH BACKGROUND MUSIC COMPLETED ===\n`);
-      
     } catch (musicError) {
       console.error(`❌ Erro ao adicionar música de fundo:`, musicError.message);
       console.log(`⚠️ Mantendo vídeo sem música de fundo`);
       console.log(`📝 Stack trace: ${musicError.stack}`);
-      // Keep the video without background music if it fails
     }
-    
+
     // Get file size after final processing
     const outputStats = await fs.stat(finalVideoPath);
-    
+
     // Clean up temporary files
     await fs.remove(jobTempDir);
-    
+
     console.log(`Job ${jobId} completed successfully - Output file: ${finalVideoFilename}`);
     console.log(`Total duration: ${totalDuration}s, File size: ${Math.round(outputStats.size / (1024 * 1024))}MB`);
-    
-    // Return JSON response with file information instead of streaming the file directly
+
     res.json({
       success: true,
       jobId: jobId,
@@ -1175,40 +1507,45 @@ app.post('/api/combine-videos', async (req, res) => {
       videosProcessed: downloadedFiles.length,
       totalDuration: Math.round(totalDuration),
       fileSize: `${Math.round(outputStats.size / (1024 * 1024))}MB`,
-      hasAudio: !!generatedAudio, // Indicates if the final video includes generated audio
-      hasBackgroundMusic: hasBackgroundMusic, // Indicates that the final video includes background music
-      processedVideos: downloadedFiles.map(f => ({
+      hasAudio: !!(generatedAudio && generatedAudio.filename),
+      hasBackgroundMusic: hasBackgroundMusic,
+      hasSubtitles: enableSubtitles,
+      subtitles: {
+        mode, // 'vtt' | 'burn' | 'none'
+        vtt: vttInfo, // { filename, url } ou null
+      },
+      processedVideos: downloadedFiles.map((f) => ({
         name: f.originalName,
-        duration: Math.round(f.duration)
+        duration: Math.round(f.duration),
       })),
-      generatedScript: generatedScript // Include the generated script in response
-      // generatedAudio is not included as it's temporary and deleted after use
+      generatedScript: generatedScript, // Include the generated script in response
     });
-    
-    // Keep video files for 24 hours - no automatic cleanup for videos
+
     console.log(`📁 Video saved for 24h: ${finalVideoFilename}`);
     console.log(`💾 File will remain available for download at: /api/download/${finalVideoFilename}`);
-    
+
     if (generatedAudio && generatedAudio.filename) {
       console.log(`🎵 Audio was used temporarily and cleaned up (not available for download)`);
     }
-    
+
     // Print list of all available files for download
     try {
       console.log(`\n📋 === LISTA COMPLETA DE ARQUIVOS DISPONÍVEIS ===`);
       console.log(`ℹ️ Nota: Arquivos de áudio são temporários e excluídos após uso na combinação`);
       const allFiles = await fs.readdir(OUTPUT_DIR);
       const fileDetails = [];
-      
+
       for (const filename of allFiles) {
         try {
           const filePath = path.join(OUTPUT_DIR, filename);
           const stats = await fs.stat(filePath);
-          
+
           if (stats.isFile()) {
             let category = 'Outros';
             if (filename.includes('final_with_music_')) {
               category = '🎵 Vídeo com Música';
+            } else if (filename.includes('final_burned_sub_')) {
+              category = '📝🔥 Vídeo com Legenda Queimada';
             } else if (filename.includes('final_with_narration_')) {
               category = '🎤 Vídeo com Narração';
             } else if (filename.includes('combined_')) {
@@ -1217,58 +1554,53 @@ app.post('/api/combine-videos', async (req, res) => {
               category = '🔊 Áudio MP3';
             } else if (filename.endsWith('.mp4')) {
               category = '📹 Vídeo MP4';
+            } else if (filename.endsWith('.vtt')) {
+              category = '📝 VTT';
             }
-            
+
             fileDetails.push({
               filename,
               category,
-              sizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100,
-              age: Math.round((Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60) * 100) / 100
+              sizeMB: Math.round((stats.size / (1024 * 1024)) * 100) / 100,
+              age: Math.round(((Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60)) * 100) / 100,
             });
           }
         } catch (fileError) {
           // Skip files with errors
         }
       }
-      
+
       // Sort by creation time (newest first)
       fileDetails.sort((a, b) => a.age - b.age);
-      
+
       fileDetails.forEach((file, index) => {
         const isNew = index === 0 && file.filename === finalVideoFilename;
         const marker = isNew ? '🆕 ' : '   ';
         console.log(`${marker}${file.category}: ${file.filename} (${file.sizeMB}MB, ${file.age.toFixed(1)}h)`);
       });
-      
+
       const totalSize = fileDetails.reduce((sum, file) => sum + file.sizeMB, 0);
       console.log(`📊 Total: ${fileDetails.length} arquivos, ${totalSize.toFixed(1)}MB`);
       console.log(`🔗 Acesse: http://localhost:3001/api/download/<filename>`);
       console.log(`📋 === FIM DA LISTA ===\n`);
-      
     } catch (listError) {
       console.error('❌ Erro ao listar arquivos:', listError.message);
     }
-    
+
     // Optional: Clean up old video files only after 24 hours (86400000 ms)
     setTimeout(() => {
-      // Clean up the final video file after 24 hours
-      fs.remove(finalVideoPath).catch(() => {
-        // Ignore errors - file might have been manually deleted
-      });
+      fs.remove(finalVideoPath).catch(() => {});
       console.log(`🗑️ Auto-cleanup: Removed ${finalVideoFilename} after 24 hours`);
-      
-      // Audio files are cleaned up immediately after use, no need for delayed cleanup
-    }, 86400000); // Remove after 24 hours
-    
+    }, 86400000);
   } catch (error) {
     console.error(`Combine videos job ${jobId} failed:`, error.message);
-    
+
     // Clean up on error
     const jobTempDir = path.join(TEMP_DIR, jobId);
     if (await fs.pathExists(jobTempDir)) {
       await fs.remove(jobTempDir);
     }
-    
+
     // Clean up temporary audio file if it was generated
     if (generatedAudio && generatedAudio.filename) {
       try {
@@ -1279,11 +1611,11 @@ app.post('/api/combine-videos', async (req, res) => {
         console.error(`⚠️ Failed to clean up temporary audio file after error:`, cleanupError.message);
       }
     }
-    
+
     res.status(500).json({
       error: 'Video combination failed',
       message: error.message,
-      jobId: jobId
+      jobId: jobId,
     });
   }
 });
@@ -1292,84 +1624,79 @@ app.post('/api/combine-videos', async (req, res) => {
 app.post('/api/prepare-videos', async (req, res) => {
   const jobId = uuidv4();
   console.log(`Starting video preparation job: ${jobId}`);
-  
+
   try {
     const { videos, accessToken } = req.body;
-    
+
     if (!videos || !Array.isArray(videos) || videos.length === 0) {
       return res.status(400).json({ error: 'No videos provided' });
     }
-    
+
     if (!accessToken) {
       return res.status(400).json({ error: 'Access token required' });
     }
-    
+
     console.log(`Processing ${videos.length} videos for job ${jobId}`);
-    
+
     // Create job-specific temp directory
     const jobTempDir = path.join(TEMP_DIR, jobId);
     fs.ensureDirSync(jobTempDir);
-    
+
     const downloadedFiles = [];
-    
+
     // Download all videos
     for (let i = 0; i < videos.length; i++) {
       const video = videos[i];
       const filename = `video_${i + 1}_${video.id}.mp4`;
-      
+
       try {
-        const filePath = await downloadVideoFromGoogleDrive(
-          video.id, 
-          accessToken, 
-          path.join(jobId, filename)
-        );
-        
+        const filePath = await downloadVideoFromGoogleDrive(video.id, accessToken, path.join(jobId, filename));
+
         // Verify the downloaded file exists and has content
         const stats = await fs.stat(filePath);
         if (stats.size === 0) {
           throw new Error(`Downloaded file is empty: ${filename}`);
         }
-        
+
         // Check video duration
         const duration = await getVideoDuration(filePath);
         console.log(`Video ${filename} duration: ${duration} seconds`);
-        
+
         downloadedFiles.push({
           path: filePath,
           originalName: video.name,
-          duration: duration
+          duration: duration,
         });
-        
       } catch (error) {
         console.error(`Failed to download video ${video.name}:`, error.message);
         // Continue with other videos instead of failing completamente
       }
     }
-    
+
     if (downloadedFiles.length === 0) {
       throw new Error('No videos were successfully downloaded');
     }
-    
+
     console.log(`Successfully downloaded ${downloadedFiles.length} videos`);
-    
+
     // Prepare output filename
     const outputFilename = `concatenated_${jobId}.mp4`;
     const outputPath = path.join(OUTPUT_DIR, outputFilename);
-    
+
     // Concatenate videos
     await concatenateVideos(
-      downloadedFiles.map(f => f.path),
+      downloadedFiles.map((f) => f.path),
       outputPath
     );
-    
+
     // Calculate total duration
     const totalDuration = downloadedFiles.reduce((sum, file) => sum + file.duration, 0);
-    
+
     // Clean up temporary files
     await fs.remove(jobTempDir);
-    
+
     console.log(`Job ${jobId} completed successfully`);
-    
+
     res.json({
       success: true,
       jobId: jobId,
@@ -1377,25 +1704,24 @@ app.post('/api/prepare-videos', async (req, res) => {
       downloadUrl: `/api/download/${outputFilename}`,
       videosProcessed: downloadedFiles.length,
       totalDuration: Math.round(totalDuration),
-      processedVideos: downloadedFiles.map(f => ({
+      processedVideos: downloadedFiles.map((f) => ({
         name: f.originalName,
-        duration: Math.round(f.duration)
-      }))
+        duration: Math.round(f.duration),
+      })),
     });
-    
   } catch (error) {
     console.error(`Job ${jobId} failed:`, error.message);
-    
+
     // Clean up on error
     const jobTempDir = path.join(TEMP_DIR, jobId);
     if (await fs.pathExists(jobTempDir)) {
       await fs.remove(jobTempDir);
     }
-    
+
     res.status(500).json({
       error: 'Video preparation failed',
       message: error.message,
-      jobId: jobId
+      jobId: jobId,
     });
   }
 });
@@ -1405,17 +1731,17 @@ app.get('/api/download/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
     const filePath = path.join(OUTPUT_DIR, filename);
-    
+
     console.log(`Download request for: ${filename}`);
     console.log(`Looking for file at: ${filePath}`);
-    
-    if (!await fs.pathExists(filePath)) {
+
+    if (!(await fs.pathExists(filePath))) {
       console.log(`File not found: ${filePath}`);
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     const stats = await fs.stat(filePath);
-    
+
     // Determine content type based on file extension
     let contentType = 'application/octet-stream';
     if (filename.endsWith('.mp4')) {
@@ -1424,95 +1750,100 @@ app.get('/api/download/:filename', async (req, res) => {
       contentType = 'audio/mpeg';
     } else if (filename.endsWith('.wav')) {
       contentType = 'audio/wav';
+    } else if (filename.endsWith('.vtt')) {
+      // Em /api/download manteria como attachment; preferimos /api/subtitles para inline.
+      contentType = 'text/vtt; charset=utf-8';
     }
-    
+
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', stats.size);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    
+
     const readStream = fs.createReadStream(filePath);
     readStream.pipe(res);
-    
-    // Clean up the file after download (optional)
+
     readStream.on('end', () => {
       console.log(`File ${filename} downloaded successfully`);
-      // Optionally remove the file after download
-      // fs.remove(filePath).catch(console.error);
     });
-    
   } catch (error) {
     console.error('Download error:', error.message);
     res.status(500).json({ error: 'Download failed' });
   }
 });
 
+// Serve VTT inline (sem attachment) para <track kind="subtitles">
+app.get('/api/subtitles/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename.endsWith('.vtt')) {
+      return res.status(400).json({ error: 'Only .vtt allowed' });
+    }
+    const filePath = path.join(OUTPUT_DIR, filename);
+    if (!(await fs.pathExists(filePath))) {
+      return res.status(404).json({ error: 'Subtitle not found' });
+    }
+    const stat = await fs.stat(filePath);
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Content-Length', stat.size);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (e) {
+    console.error('Subtitle serve error:', e.message);
+    res.status(500).json({ error: 'Failed to serve subtitle' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    ffmpegAvailable: true // You might want to actually check this
+    ffmpegAvailable: true, // You might want to actually check this
   });
-});
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({ 
-    error: 'Internal server error',
-    message: error.message 
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(`Daily Dream Server running on port ${PORT}`);
-  console.log(`Temp directory: ${TEMP_DIR}`);
-  console.log(`Output directory: ${OUTPUT_DIR}`);
 });
 
 // API endpoint to upload video to YouTube
 app.post('/api/upload-to-youtube', async (req, res) => {
   const uploadId = uuidv4();
   console.log(`Starting YouTube upload: ${uploadId}`);
-  
+
   try {
-    const { 
+    const {
       filename,
       title,
       description,
       tags,
       privacyStatus = 'private',
       categoryId = '22',
-      youtubeCredentials
+      youtubeCredentials,
     } = req.body;
-    
+
     if (!filename) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Filename is required',
-        message: 'Nome do arquivo é obrigatório'
+        message: 'Nome do arquivo é obrigatório',
       });
     }
 
     if (!title) {
       return res.status(400).json({
         error: 'Title is required',
-        message: 'Título do vídeo é obrigatório'
+        message: 'Título do vídeo é obrigatório',
       });
     }
 
     if (!youtubeCredentials || !youtubeCredentials.accessToken) {
       return res.status(400).json({
         error: 'YouTube credentials are required',
-        message: 'Credenciais do YouTube são obrigatórias'
+        message: 'Credenciais do YouTube são obrigatórias',
       });
     }
 
     // Check if video file exists
     const videoPath = path.join(OUTPUT_DIR, filename);
-    if (!await fs.pathExists(videoPath)) {
+    if (!(await fs.pathExists(videoPath))) {
       return res.status(404).json({
         error: 'Video file not found',
-        message: 'Arquivo de vídeo não encontrado'
+        message: 'Arquivo de vídeo não encontrado',
       });
     }
 
@@ -1524,9 +1855,9 @@ app.post('/api/upload-to-youtube', async (req, res) => {
     const metadata = {
       title,
       description,
-      tags: Array.isArray(tags) ? tags : (tags ? tags.split(',').map(t => t.trim()) : []),
+      tags: Array.isArray(tags) ? tags : tags ? tags.split(',').map((t) => t.trim()) : [],
       privacyStatus,
-      categoryId
+      categoryId,
     };
 
     // Upload to YouTube
@@ -1544,17 +1875,299 @@ app.post('/api/upload-to-youtube', async (req, res) => {
         description,
         tags: metadata.tags,
         privacyStatus,
-        uploadedAt: uploadResult.uploadedAt
-      }
+        uploadedAt: uploadResult.uploadedAt,
+      },
     });
-
   } catch (error) {
     console.error(`YouTube upload failed: ${uploadId}`, error.message);
-    
+
     res.status(500).json({
       error: 'YouTube upload failed',
       message: error.message,
-      uploadId
+      uploadId,
+    });
+  }
+});
+
+// API endpoint to list all available files for download
+app.get('/api/files', async (req, res) => {
+  try {
+    console.log('📋 Listing all available files for download...');
+
+    // Read all files in the output directory
+    const files = await fs.readdir(OUTPUT_DIR);
+
+    const fileList = [];
+
+    for (const filename of files) {
+      try {
+        const filePath = path.join(OUTPUT_DIR, filename);
+        const stats = await fs.stat(filePath);
+
+        if (stats.isFile()) {
+          // Get file type and category
+          let fileType = 'unknown';
+          let category = 'other';
+
+          if (filename.endsWith('.mp4')) {
+            fileType = 'video/mp4';
+            if (filename.includes('final_with_music_')) {
+              category = 'with_background_music';
+            } else if (filename.includes('final_burned_sub_')) {
+              category = 'with_burned_subtitles';
+            } else if (filename.includes('final_with_narration_')) {
+              category = 'with_narration';
+            } else if (filename.includes('combined_')) {
+              category = 'concatenated';
+            } else {
+              category = 'video';
+            }
+          } else if (filename.endsWith('.mp3')) {
+            fileType = 'audio/mpeg';
+            category = 'audio';
+          } else if (filename.endsWith('.wav')) {
+            fileType = 'audio/wav';
+            category = 'audio';
+          } else if (filename.endsWith('.vtt')) {
+            fileType = 'text/vtt';
+            category = 'vtt';
+          }
+
+          fileList.push({
+            filename: filename,
+            downloadUrl: `/api/download/${filename}`,
+            fileSize: stats.size,
+            fileSizeMB: Math.round((stats.size / (1024 * 1024)) * 100) / 100,
+            fileType: fileType,
+            category: category,
+            createdAt: stats.birthtime,
+            modifiedAt: stats.mtime,
+            ageInHours: Math.round(((Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60)) * 100) / 100,
+          });
+        }
+      } catch (fileError) {
+        console.warn(`⚠️ Error reading file ${filename}:`, fileError.message);
+        // Continue processing other files
+      }
+    }
+
+    // Sort files by creation time (newest first)
+    fileList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    console.log(`📋 Found ${fileList.length} files available for download`);
+
+    // Group files by category for better organization
+    const groupedFiles = {
+      with_background_music: fileList.filter((f) => f.category === 'with_background_music'),
+      with_burned_subtitles: fileList.filter((f) => f.category === 'with_burned_subtitles'),
+      with_narration: fileList.filter((f) => f.category === 'with_narration'),
+      concatenated: fileList.filter((f) => f.category === 'concatenated'),
+      audio: fileList.filter((f) => f.category === 'audio'),
+      vtt: fileList.filter((f) => f.category === 'vtt'),
+      video: fileList.filter((f) => f.category === 'video'),
+      other: fileList.filter((f) => f.category === 'other'),
+    };
+
+    const totalSizeMB = fileList.reduce((sum, file) => sum + file.fileSizeMB, 0);
+
+    res.json({
+      success: true,
+      summary: {
+        totalFiles: fileList.length,
+        totalSizeMB: Math.round(totalSizeMB * 100) / 100,
+        categories: {
+          with_background_music: groupedFiles.with_background_music.length,
+          with_burned_subtitles: groupedFiles.with_burned_subtitles.length,
+          with_narration: groupedFiles.with_narration.length,
+          concatenated: groupedFiles.concatenated.length,
+          audio: groupedFiles.audio.length,
+          vtt: groupedFiles.vtt.length,
+          video: groupedFiles.video.length,
+          other: groupedFiles.other.length,
+        },
+      },
+      files: fileList,
+      grouped: groupedFiles,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Error listing files:', error.message);
+    res.status(500).json({
+      error: 'Failed to list files',
+      message: error.message,
+    });
+  }
+});
+
+// API endpoint to get a quick summary of available files
+app.get('/api/files/summary', async (req, res) => {
+  try {
+    console.log('📊 Getting quick files summary...');
+
+    // Read all files in the output directory
+    const files = await fs.readdir(OUTPUT_DIR);
+
+    let totalFiles = 0;
+    let totalSizeMB = 0;
+    let videoCount = 0;
+    let audioCount = 0;
+    let withMusicCount = 0;
+    let newestFile = null;
+    let newestFileDate = 0;
+
+    for (const filename of files) {
+      try {
+        const filePath = path.join(OUTPUT_DIR, filename);
+        const stats = await fs.stat(filePath);
+
+        if (stats.isFile()) {
+          totalFiles++;
+          totalSizeMB += stats.size / (1024 * 1024);
+
+          if (filename.endsWith('.mp4')) {
+            videoCount++;
+            if (filename.includes('final_with_music_')) {
+              withMusicCount++;
+            }
+          } else if (filename.endsWith('.mp3') || filename.endsWith('.wav')) {
+            audioCount++;
+          }
+
+          // Track newest file
+          if (stats.birthtime.getTime() > newestFileDate) {
+            newestFileDate = stats.birthtime.getTime();
+            newestFile = {
+              filename: filename,
+              createdAt: stats.birthtime,
+              sizeMB: Math.round((stats.size / (1024 * 1024)) * 100) / 100,
+            };
+          }
+        }
+      } catch (fileError) {
+        continue;
+      }
+    }
+
+    console.log(`📊 Summary: ${totalFiles} files, ${Math.round(totalSizeMB)}MB total`);
+
+    res.json({
+      success: true,
+      summary: {
+        totalFiles,
+        totalSizeMB: Math.round(totalSizeMB * 100) / 100,
+        videoCount,
+        audioCount,
+        withMusicCount,
+        newestFile,
+        lastGenerated: newestFile ? newestFile.createdAt : null,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Error getting files summary:', error.message);
+    res.status(500).json({
+      error: 'Failed to get files summary',
+      message: error.message,
+    });
+  }
+});
+
+// API endpoint to delete a specific file
+app.delete('/api/files/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const filePath = path.join(OUTPUT_DIR, filename);
+
+    console.log(`🗑️ Deleting file: ${filename}`);
+
+    if (!(await fs.pathExists(filePath))) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: `Arquivo ${filename} não encontrado`,
+      });
+    }
+
+    // Get file stats before deletion
+    const stats = await fs.stat(filePath);
+    const fileSizeMB = Math.round((stats.size / (1024 * 1024)) * 100) / 100;
+
+    await fs.remove(filePath);
+
+    console.log(`✅ File deleted successfully: ${filename} (${fileSizeMB}MB)`);
+
+    res.json({
+      success: true,
+      message: `File ${filename} deleted successfully`,
+      deletedFile: {
+        filename: filename,
+        fileSizeMB: fileSizeMB,
+        deletedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('❌ Error deleting file:', error.message);
+    res.status(500).json({
+      error: 'Failed to delete file',
+      message: error.message,
+    });
+  }
+});
+
+// API endpoint to clean up old files (older than specified hours)
+app.post('/api/cleanup', async (req, res) => {
+  try {
+    const { olderThanHours = 24 } = req.body;
+
+    console.log(`🧹 Starting cleanup of files older than ${olderThanHours} hours...`);
+
+    const files = await fs.readdir(OUTPUT_DIR);
+    const deletedFiles = [];
+    let totalSizeDeleted = 0;
+
+    for (const filename of files) {
+      try {
+        const filePath = path.join(OUTPUT_DIR, filename);
+        const stats = await fs.stat(filePath);
+
+        if (stats.isFile()) {
+          const ageInHours = (Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60);
+
+          if (ageInHours > olderThanHours) {
+            const fileSizeMB = Math.round((stats.size / (1024 * 1024)) * 100) / 100;
+            await fs.remove(filePath);
+
+            deletedFiles.push({
+              filename: filename,
+              fileSizeMB: fileSizeMB,
+              ageInHours: Math.round(ageInHours * 100) / 100,
+            });
+            totalSizeDeleted += fileSizeMB;
+
+            console.log(`🗑️ Deleted old file: ${filename} (${fileSizeMB}MB, ${Math.round(ageInHours)}h old)`);
+          }
+        }
+      } catch (fileError) {
+        console.warn(`⚠️ Error processing file ${filename}:`, fileError.message);
+      }
+    }
+
+    console.log(`✅ Cleanup completed: ${deletedFiles.length} files deleted, ${Math.round(totalSizeDeleted * 100) / 100}MB freed`);
+
+    res.json({
+      success: true,
+      summary: {
+        filesDeleted: deletedFiles.length,
+        totalSizeDeletedMB: Math.round(totalSizeDeleted * 100) / 100,
+        olderThanHours: olderThanHours,
+      },
+      deletedFiles: deletedFiles,
+      cleanupAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Error during cleanup:', error.message);
+    res.status(500).json({
+      error: 'Cleanup failed',
+      message: error.message,
     });
   }
 });
@@ -1567,25 +2180,25 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
       console.log(`Video: ${path.basename(videoPath)}`);
       console.log(`Output: ${path.basename(outputPath)}`);
       console.log(`Video duration: ${videoDuration}s`);
-      
+
       // Usar arquivo de música de fundo específico
       const backgroundMusicPath = path.join(AUDIOS_DIR, 'background.mp3');
-      
+
       // Verificar se o arquivo de música existe
-      if (!await fs.pathExists(backgroundMusicPath)) {
+      if (!(await fs.pathExists(backgroundMusicPath))) {
         throw new Error(`Background music file not found: ${backgroundMusicPath}`);
       }
-      
+
       console.log(`🎼 Using background music file: ${backgroundMusicPath}`);
-      
+
       // Obter duração da música de fundo
       const musicDuration = await getAudioDuration(backgroundMusicPath);
       console.log(`🎵 Background music duration: ${musicDuration}s`);
       console.log(`📹 Video duration: ${videoDuration}s`);
-      
+
       // Preparar filtros de áudio baseado na duração
       let audioFilters = [];
-      
+
       if (musicDuration < videoDuration) {
         // Se a música é mais curta que o vídeo, fazer loop
         const loopCount = Math.ceil(videoDuration / musicDuration);
@@ -1594,7 +2207,7 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
           `[1:a]aloop=loop=${loopCount - 1}:size=${Math.floor(musicDuration * 44100)}[bg_music_loop]`,
           '[0:a]volume=1.0[main_audio]',
           '[bg_music_loop]volume=0.06[bg_music]',
-          '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]'
+          '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]',
         ];
       } else {
         // Se a música é mais longa ou igual ao vídeo, cortar na duração do vídeo
@@ -1602,24 +2215,28 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
         audioFilters = [
           '[0:a]volume=1.0[main_audio]',
           `[1:a]atrim=0:${videoDuration},volume=0.05[bg_music]`,
-          '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]'
+          '[main_audio][bg_music]amix=inputs=2:duration=first[mixed_audio]',
         ];
       }
-      
+
       console.log('🎬🎵 Mixing video with background music...');
-      
-      // Combinar vídeo com música de fundo
+
       ffmpeg()
         .input(videoPath) // Vídeo principal (já com narração se houver)
         .input(backgroundMusicPath) // Música de fundo específica
         .complexFilter(audioFilters)
         .outputOptions([
-          '-map', '0:v', // Usar vídeo da primeira entrada
-          '-map', '[mixed_audio]', // Usar áudio mixado
-          '-c:v', 'copy', // Não recodificar vídeo para economizar tempo
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-shortest' // Garantir que não ultrapasse a duração do vídeo
+          '-map',
+          '0:v',
+          '-map',
+          '[mixed_audio]',
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-shortest',
         ])
         .output(outputPath)
         .on('start', (commandLine) => {
@@ -1641,7 +2258,6 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
           reject(err);
         })
         .run();
-        
     } catch (error) {
       console.error('❌ Background music setup error:', error.message);
       reject(error);
@@ -1649,290 +2265,26 @@ function addBackgroundMusicToVideo(videoPath, outputPath, videoDuration) {
   });
 }
 
-// API endpoint to list all available files for download
-app.get('/api/files', async (req, res) => {
-  try {
-    console.log('📋 Listing all available files for download...');
-    
-    // Read all files in the output directory
-    const files = await fs.readdir(OUTPUT_DIR);
-    
-    const fileList = [];
-    
-    for (const filename of files) {
-      try {
-        const filePath = path.join(OUTPUT_DIR, filename);
-        const stats = await fs.stat(filePath);
-        
-        if (stats.isFile()) {
-          // Get file type and category
-          let fileType = 'unknown';
-          let category = 'other';
-          
-          if (filename.endsWith('.mp4')) {
-            fileType = 'video/mp4';
-            if (filename.includes('combined_')) {
-              category = 'concatenated';
-            } else if (filename.includes('final_with_narration_')) {
-              category = 'with_narration';
-            } else if (filename.includes('final_with_music_')) {
-              category = 'with_background_music';
-            } else {
-              category = 'video';
-            }
-          } else if (filename.endsWith('.mp3')) {
-            fileType = 'audio/mpeg';
-            category = 'audio';
-          } else if (filename.endsWith('.wav')) {
-            fileType = 'audio/wav';
-            category = 'audio';
-          }
-          
-          fileList.push({
-            filename: filename,
-            downloadUrl: `/api/download/${filename}`,
-            fileSize: stats.size,
-            fileSizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100,
-            fileType: fileType,
-            category: category,
-            createdAt: stats.birthtime,
-            modifiedAt: stats.mtime,
-            ageInHours: Math.round((Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60) * 100) / 100
-          });
-        }
-      } catch (fileError) {
-        console.warn(`⚠️ Error reading file ${filename}:`, fileError.message);
-        // Continue processing other files
-      }
-    }
-    
-    // Sort files by creation time (newest first)
-    fileList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    
-    console.log(`📋 Found ${fileList.length} files available for download`);
-    
-    // Group files by category for better organization
-    const groupedFiles = {
-      with_background_music: fileList.filter(f => f.category === 'with_background_music'),
-      with_narration: fileList.filter(f => f.category === 'with_narration'),
-      concatenated: fileList.filter(f => f.category === 'concatenated'),
-      audio: fileList.filter(f => f.category === 'audio'),
-      video: fileList.filter(f => f.category === 'video'),
-      other: fileList.filter(f => f.category === 'other')
-    };
-    
-    const totalSizeMB = fileList.reduce((sum, file) => sum + file.fileSizeMB, 0);
-    
-    res.json({
-      success: true,
-      summary: {
-        totalFiles: fileList.length,
-        totalSizeMB: Math.round(totalSizeMB * 100) / 100,
-        categories: {
-          with_background_music: groupedFiles.with_background_music.length,
-          with_narration: groupedFiles.with_narration.length,
-          concatenated: groupedFiles.concatenated.length,
-          audio: groupedFiles.audio.length,
-          video: groupedFiles.video.length,
-          other: groupedFiles.other.length
-        }
-      },
-      files: fileList,
-      grouped: groupedFiles,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Error listing files:', error.message);
-    res.status(500).json({
-      error: 'Failed to list files',
-      message: error.message
-    });
-  }
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('Unhandled error:', error);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: error.message,
+  });
 });
 
-// API endpoint to get a quick summary of available files
-app.get('/api/files/summary', async (req, res) => {
-  try {
-    console.log('📊 Getting quick files summary...');
-    
-    // Read all files in the output directory
-    const files = await fs.readdir(OUTPUT_DIR);
-    
-    let totalFiles = 0;
-    let totalSizeMB = 0;
-    let videoCount = 0;
-    let audioCount = 0;
-    let withMusicCount = 0;
-    let newestFile = null;
-    let newestFileDate = 0;
-    
-    for (const filename of files) {
-      try {
-        const filePath = path.join(OUTPUT_DIR, filename);
-        const stats = await fs.stat(filePath);
-        
-        if (stats.isFile()) {
-          totalFiles++;
-          totalSizeMB += stats.size / (1024 * 1024);
-          
-          if (filename.endsWith('.mp4')) {
-            videoCount++;
-            if (filename.includes('final_with_music_')) {
-              withMusicCount++;
-            }
-          } else if (filename.endsWith('.mp3') || filename.endsWith('.wav')) {
-            audioCount++;
-          }
-          
-          // Track newest file
-          if (stats.birthtime.getTime() > newestFileDate) {
-            newestFileDate = stats.birthtime.getTime();
-            newestFile = {
-              filename: filename,
-              createdAt: stats.birthtime,
-              sizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100
-            };
-          }
-        }
-      } catch (fileError) {
-        // Skip files with errors
-        continue;
-      }
-    }
-    
-    console.log(`📊 Summary: ${totalFiles} files, ${Math.round(totalSizeMB)}MB total`);
-    
-    res.json({
-      success: true,
-      summary: {
-        totalFiles,
-        totalSizeMB: Math.round(totalSizeMB * 100) / 100,
-        videoCount,
-        audioCount,
-        withMusicCount,
-        newestFile,
-        lastGenerated: newestFile ? newestFile.createdAt : null
-      },
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Error getting files summary:', error.message);
-    res.status(500).json({
-      error: 'Failed to get files summary',
-      message: error.message
-    });
-  }
-});
-
-// API endpoint to delete a specific file
-app.delete('/api/files/:filename', async (req, res) => {
-  try {
-    const { filename } = req.params;
-    const filePath = path.join(OUTPUT_DIR, filename);
-    
-    console.log(`🗑️ Deleting file: ${filename}`);
-    
-    if (!await fs.pathExists(filePath)) {
-      return res.status(404).json({
-        error: 'File not found',
-        message: `Arquivo ${filename} não encontrado`
-      });
-    }
-    
-    // Get file stats before deletion
-    const stats = await fs.stat(filePath);
-    const fileSizeMB = Math.round(stats.size / (1024 * 1024) * 100) / 100;
-    
-    await fs.remove(filePath);
-    
-    console.log(`✅ File deleted successfully: ${filename} (${fileSizeMB}MB)`);
-    
-    res.json({
-      success: true,
-      message: `File ${filename} deleted successfully`,
-      deletedFile: {
-        filename: filename,
-        fileSizeMB: fileSizeMB,
-        deletedAt: new Date().toISOString()
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error deleting file:', error.message);
-    res.status(500).json({
-      error: 'Failed to delete file',
-      message: error.message
-    });
-  }
-});
-
-// API endpoint to clean up old files (older than specified hours)
-app.post('/api/cleanup', async (req, res) => {
-  try {
-    const { olderThanHours = 24 } = req.body;
-    
-    console.log(`🧹 Starting cleanup of files older than ${olderThanHours} hours...`);
-    
-    const files = await fs.readdir(OUTPUT_DIR);
-    const deletedFiles = [];
-    let totalSizeDeleted = 0;
-    
-    for (const filename of files) {
-      try {
-        const filePath = path.join(OUTPUT_DIR, filename);
-        const stats = await fs.stat(filePath);
-        
-        if (stats.isFile()) {
-          const ageInHours = (Date.now() - stats.birthtime.getTime()) / (1000 * 60 * 60);
-          
-          if (ageInHours > olderThanHours) {
-            const fileSizeMB = Math.round(stats.size / (1024 * 1024) * 100) / 100;
-            await fs.remove(filePath);
-            
-            deletedFiles.push({
-              filename: filename,
-              fileSizeMB: fileSizeMB,
-              ageInHours: Math.round(ageInHours * 100) / 100
-            });
-            totalSizeDeleted += fileSizeMB;
-            
-            console.log(`🗑️ Deleted old file: ${filename} (${fileSizeMB}MB, ${Math.round(ageInHours)}h old)`);
-          }
-        }
-      } catch (fileError) {
-        console.warn(`⚠️ Error processing file ${filename}:`, fileError.message);
-      }
-    }
-    
-    console.log(`✅ Cleanup completed: ${deletedFiles.length} files deleted, ${Math.round(totalSizeDeleted * 100) / 100}MB freed`);
-    
-    res.json({
-      success: true,
-      summary: {
-        filesDeleted: deletedFiles.length,
-        totalSizeDeletedMB: Math.round(totalSizeDeleted * 100) / 100,
-        olderThanHours: olderThanHours
-      },
-      deletedFiles: deletedFiles,
-      cleanupAt: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Error during cleanup:', error.message);
-    res.status(500).json({
-      error: 'Cleanup failed',
-      message: error.message
-    });
-  }
+app.listen(PORT, () => {
+  console.log(`Daily Dream Server running on port ${PORT}`);
+  console.log(`Temp directory: ${TEMP_DIR}`);
+  console.log(`Output directory: ${OUTPUT_DIR}`);
 });
 
 // Helper function to calculate timeout based on text length
 function getTimeoutForTextLength(textLength) {
   // Base timeout: 30 segundos
   let timeout = 30000;
-  
+
   if (textLength <= 1000) {
     timeout = 30000; // 30 segundos para textos curtos
   } else if (textLength <= 3000) {
@@ -1944,7 +2296,7 @@ function getTimeoutForTextLength(textLength) {
   } else {
     timeout = 300000; // 5 minutos para textos extremamente grandes
   }
-  
-  console.log(`⏱️ Timeout calculado para ${textLength} caracteres: ${timeout/1000}s`);
+
+  console.log(`⏱️ Timeout calculado para ${textLength} caracteres: ${timeout / 1000}s`);
   return timeout;
 }

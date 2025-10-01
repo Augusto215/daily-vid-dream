@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useGoogleDrive } from './useGoogleDrive';
 
-const numberVideos = 5;
+const numberVideos = 20;
 
 // Importa o tipo DriveVideo do hook
 interface DriveVideo {
@@ -34,6 +34,14 @@ interface PreparedVideo {
   error?: string;
   hasAudio?: boolean; // Indicates if the final video includes generated audio
   hasBackgroundMusic?: boolean; // Indicates if the final video includes background music
+  hasSubtitles?: boolean; // Indicates if the final video includes automatic subtitles
+  subtitles?: {
+    mode: 'vtt' | 'burn' | 'none';
+    vtt?: {
+      filename: string;
+      url: string; // ex.: "/api/subtitles/subs_<jobId>.vtt"
+    } | null;
+  };
   generatedScript?: {
     script: string;
     theme: string;
@@ -63,7 +71,14 @@ interface ScheduleEntry {
 // Backend API configuration
 const BACKEND_URL = 'http://localhost:3001/api';
 
-export const useVideoPreparation = (schedules: ScheduleEntry[], openaiApiKey?: string, elevenLabsApiKey?: string, youtubeApiKey?: string) => {
+export const useVideoPreparation = (
+  schedules: ScheduleEntry[],
+  openaiApiKey?: string,
+  elevenLabsApiKey?: string,
+  youtubeApiKey?: string,
+  enableSubtitles: boolean = true,
+  subtitleMode: 'vtt' | 'burn' | 'none' = 'vtt'
+) => {
   const [preparedVideos, setPreparedVideos] = useState<PreparedVideo[]>([]);
   const [isPreparingVideo, setIsPreparingVideo] = useState(false);
   const [preparationLogs, setPreparationLogs] = useState<string[]>([]);
@@ -325,8 +340,6 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
     return selected;
   }, [videos, addLog]);
 
-
-
   // Combina vídeos usando FFmpeg real no backend
   const combineVideosWithFFmpeg = useCallback(async (selectedVideos: DriveVideo[], scheduleId: string): Promise<any> => {
     try {
@@ -382,7 +395,9 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         accessToken,
         scheduleId,
         openaiApiKey, // Inclui a chave da OpenAI para geração automática de script
-        elevenLabsApiKey // Inclui a chave da ElevenLabs para geração de áudio
+        elevenLabsApiKey, // Inclui a chave da ElevenLabs para geração de áudio
+        enableSubtitles, // Inclui a opção de legendas automáticas
+        subtitleMode: 'burn', 
       };
       
       addLog(`📦 Payload para backend: ${JSON.stringify(payload, null, 2).substring(0, 200)}...`);
@@ -417,7 +432,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
       if (result.generatedScript) {
         addLog(`📝 === SCRIPT GERADO NO BACKEND ===`);
         const scriptLines = result.generatedScript.script.split('\n');
-        scriptLines.forEach((line) => {
+        scriptLines.forEach((line: string) => {
           if (line.trim()) {
             addLog(`📝 ${line.trim()}`);
           } else {
@@ -454,6 +469,24 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog(`⚠️ Música de fundo não foi adicionada (verifique logs do servidor)`);
       }
       
+      // Legendas
+      if (result.hasSubtitles) {
+        if (result?.subtitles?.mode === 'vtt' && result?.subtitles?.vtt?.url) {
+          const base = BACKEND_URL.replace('/api', '');
+          const vttUrl = `${base}${result.subtitles.vtt.url}`;
+          addLog(`📝✨ LEGENDAS VTT DISPONÍVEIS! Use <track src="${vttUrl}" kind="subtitles" ... /> no <video>`);
+          addLog(`🔗 VTT: ${vttUrl}`);
+        } else if (result?.subtitles?.mode === 'burn') {
+          addLog(`📝🔥 Legenda QUEIMADA no arquivo final (não precisa <track>)`);
+        } else {
+          addLog(`📝 Legendas geradas.`);
+        }
+      } else if (enableSubtitles && result.hasAudio) {
+        addLog(`⚠️ Legendas habilitadas mas não foram adicionadas (verifique se script foi gerado)`);
+      } else if (!enableSubtitles) {
+        addLog(`📝❌ Legendas desabilitadas nas configurações`);
+      }
+      
       // Usa a URL de download fornecida pelo backend
       const downloadUrl = `${BACKEND_URL.replace('/api', '')}${result.downloadUrl}`;
       addLog(`📥 URL de download: ${downloadUrl}`);
@@ -463,6 +496,8 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         downloadUrl,
         hasAudio: result.hasAudio || false,
         hasBackgroundMusic: result.hasBackgroundMusic || false,
+        hasSubtitles: result.hasSubtitles || false,
+        subtitles: result.subtitles ?? undefined,
         generatedScript: result.generatedScript || null,
         // generatedAudio is no longer saved as it's temporary and deleted after use
         fileSize: result.fileSize,
@@ -474,7 +509,7 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
       addLog(`❌ Erro na combinação real dos arquivos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       return null;
     }
-  }, [addLog, getAccessToken, isAuthenticated, openaiApiKey, elevenLabsApiKey]);
+  }, [addLog, getAccessToken, isAuthenticated, openaiApiKey, elevenLabsApiKey, enableSubtitles, subtitleMode]);
 
   // Prepara vídeo para um agendamento usando FFmpeg real
   const prepareVideoForSchedule = useCallback(async (schedule: ScheduleEntry) => {
@@ -537,13 +572,13 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
               addLog(`✅ Script gerado com sucesso! Tokens: ${result.metadata.tokensUsed}`);
               addLog(`📝 === SCRIPT GERADO ===`);
               
-              // Divide o script em linhas para melhor formatação nos logs
+              // Divide o script em linhas para melhor forma
               const scriptLines = result.script.split('\n');
               scriptLines.forEach((line, index) => {
                 if (line.trim()) {
                   addLog(`📝 ${line.trim()}`);
                 } else if (index < scriptLines.length - 1) {
-                  addLog(`📝 `); // Linha em branco
+                  addLog(`📝 `);
                 }
               });
               
@@ -599,6 +634,8 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         videosProcessed: result.videosProcessed,
         hasAudio: result.hasAudio || false,
         hasBackgroundMusic: result.hasBackgroundMusic || false,
+        hasSubtitles: result.hasSubtitles || false,
+        subtitles: result.subtitles ?? undefined,
         generatedScript: result.generatedScript || generatedScript || undefined,
         // generatedAudio is no longer included as it's temporary
       };
@@ -616,6 +653,13 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog(`🎵🎶 MÚSICA DE FUNDO ADICIONADA! O vídeo inclui música ambiente de fundo.`);
       }
       
+      if (preparedVideo.subtitles?.mode === 'vtt' && preparedVideo.subtitles?.vtt?.url) {
+        const base = BACKEND_URL.replace('/api', '');
+        addLog(`📝 VTT pronto: ${base}${preparedVideo.subtitles.vtt.url}`);
+      } else if (preparedVideo.subtitles?.mode === 'burn') {
+        addLog('📝🔥 Legenda foi QUEIMADA no arquivo final.');
+      }
+
       if (preparedVideo.generatedScript || generatedScript) {
         const scriptToUse = preparedVideo.generatedScript || generatedScript;
         addLog(`📝 Script foi gerado com ${scriptToUse.tokensUsed} tokens!`);
@@ -651,8 +695,8 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
         addLog(`\n📋 === LISTANDO TODOS OS ARQUIVOS DISPONÍVEIS ===`);
         const summaryResponse = await fetch(`${BACKEND_URL}/files/summary`);
         if (summaryResponse.ok) {
-          const summaryData = await summaryResponse.json();
-          if (summaryData.success) {
+          const summaryData = await responseToJsonSafe(summaryResponse);
+          if (summaryData?.success) {
             const { summary } = summaryData;
             addLog(`📊 Total de arquivos: ${summary.totalFiles}`);
             addLog(`📹 Vídeos: ${summary.videoCount} | 🎵 Com música: ${summary.withMusicCount} | 🔊 Áudios: ${summary.audioCount}`);
@@ -802,3 +846,12 @@ O título deve ser chamativo e otimizado para SEO. A descrição deve incluir em
     clearLogs: () => setPreparationLogs([])
   };
 };
+
+// Helper para parse seguro
+async function responseToJsonSafe(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}

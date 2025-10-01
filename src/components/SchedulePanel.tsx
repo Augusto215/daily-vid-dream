@@ -91,6 +91,7 @@ export const SchedulePanel = () => {
   const [scheduleTime, setScheduleTime] = useLocalStorage('daily-dream-schedule-time', "09:00");
   const [frequency, setFrequency] = useLocalStorage('daily-dream-frequency', "daily");
   const [customDate, setCustomDate] = useLocalStorage('daily-dream-custom-date', "");
+  const [enableSubtitles, setEnableSubtitles] = useLocalStorage('daily-dream-enable-subtitles', true);
   // Get API keys from user credentials
   const { getOpenAIKey, getElevenLabsKey, getYouTubeKey } = useCredentials();
   
@@ -134,7 +135,7 @@ export const SchedulePanel = () => {
   };
   
   // Video preparation hook (agora inclui YouTube upload automático)
-  const { preparedVideos, isPreparingVideo, preparationLogs, manualPrepareVideo, clearLogs } = useVideoPreparation(schedules, getOpenAIKey(), getElevenLabsKey(), getYouTubeKey());
+  const { preparedVideos, isPreparingVideo, preparationLogs, manualPrepareVideo, clearLogs } = useVideoPreparation(schedules, getOpenAIKey(), getElevenLabsKey(), getYouTubeKey(), enableSubtitles);
 
   // Persist prepared videos in localStorage
   const [persistedPreparedVideos, setPersistedPreparedVideos] = useLocalStorage('daily-dream-prepared-videos', []);
@@ -451,7 +452,6 @@ export const SchedulePanel = () => {
                   </p>
                 </div>
               )}
-  
             </div>
           )}
 
